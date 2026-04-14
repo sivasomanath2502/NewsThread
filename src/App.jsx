@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { fallbackStories, fetchDailyStories, fetchRelatedTimeline } from './newsApi.js'
 import { summarizeTimelineWithLocalModel } from './localRecap.js'
 import JargonText from './JargonText.jsx'
@@ -325,7 +326,10 @@ function Feed({stories,followedIds,readingHistory,onOpen,searchQuery,bookmarks,o
 }
 
 /* ─── Story view ─────────────────────────────────────────────── */
-function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,showSimulatedUpdate,onSimulateUpdate,onBack,onFeedback,annotations,onSaveAnnotation,isBookmarked,onToggleBookmark}){
+function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,showSimulatedUpdate,onSimulateUpdate,onBack,onFeedback,annotations,onSaveAnnotation,isBookmarked,onToggleBookmark}){
+  const { storyId } = useParams()
+  const story = storiesData.find(s => String(s.id) === String(storyId))
+  
   const[expandedIndex,setExpandedIndex]=useState(null)
   const[annotatingIndex,setAnnotatingIndex]=useState(null)
   const[annotationDraft,setAnnotationDraft]=useState('')
@@ -333,6 +337,9 @@ function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,sh
   const[submitted,setSubmitted]=useState(false)
   const[progress,setProgress]=useState(0)
   const[copied,setCopied]=useState(false)
+  const[isPlaying,setIsPlaying]=useState(false)
+  const[expandedText,setExpandedText]=useState(null)
+  const[expanding,setExpanding]=useState(false)
   const[relatedTimeline,setRelatedTimeline]=useState([])
   const[relErr,setRelErr]=useState('')
   const[recapLines,setRecapLines]=useState([
@@ -341,10 +348,21 @@ function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,sh
     'Follow the story to track how the timeline changes day by day.',
   ])
 
+  useEffect(() => {
+    if (story) {
+      window.scrollTo(0, 0)
+    }
+  }, [storyId])
+
+  if (!story) return <div className="py-24 text-center">Story not found</div>
+
+  const currentAnswer = savedAnswer[String(story.id)] || null
+  const currentSimulated = showSimulatedUpdate[String(story.id)] || false
+
   useEffect(()=>{
-    if(savedAnswer){setSelectedOption(savedAnswer.optionIndex);setSubmitted(true)}
+    if(currentAnswer){setSelectedOption(currentAnswer.optionIndex);setSubmitted(true)}
     else{setSelectedOption(null);setSubmitted(false)}
-  },[story.id,savedAnswer])
+  },[story.id,currentAnswer])
   useEffect(()=>{
     const fn=()=>{const el=document.documentElement;const total=el.scrollHeight-el.clientHeight;setProgress(total>0?Math.round((el.scrollTop/total)*100):0)}
     window.addEventListener('scroll',fn,{passive:true});return()=>window.removeEventListener('scroll',fn)
@@ -393,9 +411,79 @@ function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,sh
     setAnnotatingIndex(null)
   }
 
-  const predictedLabel=savedAnswer?.optionLabel??(selectedOption!==null?story.question.options[selectedOption]:null)
-  const st=cs(story.category)
   const timelineToShow = relatedTimeline.length ? relatedTimeline : story.timeline
+
+  const handleSpeak = () => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel()
+      setIsPlaying(false)
+      return
+    }
+    const textToSpeak = `
+      Title: ${story.title}.
+      Thread Timeline: ${timelineToShow.map(t => `${t.date}, ${t.event}. ${t.details}`).join('. ')}.
+      AI Recap: ${recapLines.map((l, i) => `Point ${i + 1}. ${l}`).join(' ')}.
+      Today's Full Article: ${(expandedText || story.article).replace(/\[\+\d+\s*chars\]/g, '').replace(/Read the original article:\s*https?:\/\/[^\s]+/i, '').replace(/\n/g, '. ')}.
+    `;
+    const utterance = new SpeechSynthesisUtterance(textToSpeak)
+    utterance.onend = () => setIsPlaying(false)
+    window.speechSynthesis.speak(utterance)
+    setIsPlaying(true)
+  }
+
+  useEffect(() => {
+    return () => window.speechSynthesis.cancel()
+  }, [])
+
+  const handleExpandArticle = async () => {
+    if(!story.sourceUrl) return
+    setExpanding(true)
+    const proxies = [
+      `https://api.allorigins.win/get?url=${encodeURIComponent(story.sourceUrl)}`,
+      `https://corsproxy.io/?${encodeURIComponent(story.sourceUrl)}`
+    ]
+    
+    let success = false
+    for (const url of proxies) {
+      if (success) break
+      try {
+        const res = await fetch(url)
+        if (!res.ok) continue
+        
+        let html = ''
+        if (url.includes('allorigins')) {
+          const data = await res.json()
+          html = data.contents
+        } else {
+          html = await res.text()
+        }
+
+        const doc = new DOMParser().parseFromString(html, 'text/html')
+        const pTags = Array.from(doc.querySelectorAll('p'))
+        const text = pTags.map(p => p.textContent.trim()).filter(t => t.length > 50).join('\n\n')
+        
+        if (text && text.length > 100) {
+          setExpandedText(text)
+          success = true
+        }
+      } catch (e) {
+        console.warn(`Proxy ${url} failed`, e)
+      }
+    }
+
+    if (!success) {
+      alert('Note: This news site might be blocking automated access or the article is behind a paywall. You can read it directly via the "Read full article" link below.')
+    }
+    setExpanding(false)
+  }
+
+  const predictedLabel=currentAnswer?.optionLabel??(selectedOption!==null?story.question.options[selectedOption]:null)
+  const st=cs(story.category)
+
+  // Clean the cached article so it doesn't show "Read the original article:" inline
+  const rawArticle = (expandedText || story.article).replace(/Read the original article:\s*https?:\/\/[^\s]+/i, '').trim();
+  const hasTruncation = !expandedText && !!rawArticle.match(/\[\+\d+\s*chars\]/i);
+  const displayArticleText = rawArticle.replace(/\[\+\d+\s*chars\]/i, '').trim();
 
   return(
     <div className="pb-24">
@@ -404,15 +492,19 @@ function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,sh
       </div>
       <div className="bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800">
         <div className="mx-auto max-w-3xl px-4 pt-6 pb-7">
-          <button onClick={onBack} className="mb-5 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition">
-            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 3L4 8l5 5"/></svg>Back to feed
-          </button>
+          <div className="flex items-center justify-between mb-5">
+            <button onClick={onBack} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition">
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 3L4 8l5 5"/></svg>Back to feed
+            </button>
+            <button onClick={handleSpeak} className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all active:scale-95 ${isPlaying ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
+              {isPlaying ? '⏸ Stop Audio' : '🔊 Listen to Page'}
+            </button>
+          </div>
           <div className="flex items-center gap-2 mb-3">
             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${st.pill} ${st.dpill}`}>{story.category}</span>
             <span className="text-xs text-slate-400 dark:text-slate-500">{story.readTime} · {story.timeline.length} events</span>
           </div>
           <h1 className="text-lg sm:text-xl font-bold leading-snug text-slate-900 dark:text-white" style={{fontFamily:'Georgia,serif'}}><JargonText text={story.title}/></h1>
-          <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400 leading-relaxed"><JargonText text={story.description}/></p>
         </div>
       </div>
 
@@ -519,12 +611,41 @@ function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,sh
           </div>
         </section>
 
+        {/* ── FULL ARTICLE ── */}
+        {(expandedText || story.article) && (
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2"><div className="w-1 h-5 rounded-full bg-blue-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">📰 Today's Full Article</span></div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-5 space-y-4">
+              {displayArticleText.split('\n\n').map((para, i, arr) => (
+                <p key={i} className="text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">
+                  <JargonText text={para}/>
+                  {hasTruncation && i === arr.length - 1 && (
+                    <button onClick={handleExpandArticle} disabled={expanding} className="ml-2 inline-block text-[13px] font-bold text-indigo-500 hover:text-indigo-700 disabled:opacity-50 cursor-pointer transition">
+                      {expanding ? 'Expanding...' : '... Show more'}
+                    </button>
+                  )}
+                </p>
+              ))}
+              {story.sourceUrl && (
+                <div className="pt-2">
+                  <a href={story.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1.5">
+                    Read full article on {story.tag === 'Live update' ? 'original source' : story.tag}
+                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 3h6v6M11 3L3 11"/></svg>
+                  </a>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         <section>
           <div className="flex items-center justify-between">
             <div className="flex flex-wrap gap-2">
-              <button onClick={onToggleFollow} className={`rounded-full px-4 py-2 text-sm font-bold border-2 transition-all active:scale-95 ${isFollowing?'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400':'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-indigo-300 hover:text-indigo-700'}`}>{isFollowing?'✓ Following':'+ Follow'}</button>
-              <button onClick={()=>onToggleBookmark(story.id)} className={`rounded-full px-4 py-2 text-sm font-bold border-2 transition-all active:scale-95 ${isBookmarked?'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400':'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-indigo-300'}`}>{isBookmarked?'🔖 Saved':'🔖 Save'}</button>
-              {story.simulatedUpdate&&<button onClick={onSimulateUpdate} disabled={showSimulatedUpdate} className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95">{showSimulatedUpdate?'Updated ✓':'⚡ Simulate update'}</button>}
+              <button onClick={() => onToggleFollow(story.id)} className={`rounded-full px-4 py-2 text-sm font-bold border-2 transition-all active:scale-95 ${isFollowing.includes(story.id)?'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400':'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-indigo-300 hover:text-indigo-700'}`}>{isFollowing.includes(story.id)?'✓ Following':'+ Follow'}</button>
+              <button onClick={()=>onToggleBookmark(story.id)} className={`rounded-full px-4 py-2 text-sm font-bold border-2 transition-all active:scale-95 ${isBookmarked.includes(story.id)?'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400':'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-indigo-300'}`}>{isBookmarked.includes(story.id)?'🔖 Saved':'🔖 Save'}</button>
+              {story.simulatedUpdate&&<button onClick={() => onSimulateUpdate(story.id)} disabled={currentSimulated} className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95">{currentSimulated?'Updated ✓':'⚡ Simulate update'}</button>}
               <button onClick={handleShare} className="rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95">{copied?'Copied!':'↗ Share'}</button>
             </div>
             {story.sourceUrl&&(
@@ -539,7 +660,7 @@ function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,sh
         <section>
           <div className="flex items-center gap-2 mb-4"><div className="w-1 h-5 rounded-full bg-violet-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">🎯 Engage</span></div>
           <div className="rounded-3xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 p-5">
-            {savedAnswer&&<div className="mb-4 rounded-2xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 px-4 py-3 text-sm text-violet-900 dark:text-violet-300"><span className="font-bold">Your answer:</span>{' '}{String.fromCharCode(65+savedAnswer.optionIndex)}. {savedAnswer.optionLabel}</div>}
+            {currentAnswer&&<div className="mb-4 rounded-2xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 px-4 py-3 text-sm text-violet-900 dark:text-violet-300"><span className="font-bold">Your answer:</span>{' '}{String.fromCharCode(65+currentAnswer.optionIndex)}. {currentAnswer.optionLabel}</div>}
             <p className="text-base font-bold text-slate-900 dark:text-white leading-snug" style={{fontFamily:'Georgia,serif'}}>{story.question.text}</p>
             <form onSubmit={handleSubmit} className="mt-4 space-y-2.5">
               {story.question.options.map((opt,i)=>{const checked=selectedOption===i;return(
@@ -554,7 +675,7 @@ function StoryView({story,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,sh
         </section>
 
         {/* ── SIMULATED UPDATE ── */}
-        {showSimulatedUpdate&&story.simulatedUpdate&&(
+        {currentSimulated&&story.simulatedUpdate&&(
           <section>
             <div className="rounded-3xl border-2 border-sky-300 dark:border-sky-700 bg-sky-50/50 dark:bg-sky-950/30 p-5">
               <span className="rounded-full bg-sky-100 dark:bg-sky-900/50 px-3 py-1 text-[11px] font-bold text-sky-800 dark:text-sky-300">⚡ Story updated</span>
@@ -722,11 +843,12 @@ function updateStreak(){
 }
 
 /* ─── App ────────────────────────────────────────────────────── */
-export default function App(){
+/* ─── App Content (Inside Router) ───────────────────────────── */
+function AppContent() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const[ready,setReady]=useState(false)
   const[onboarded,setOnboarded]=useState(false)
-  const[screen,setScreen]=useState('feed') // 'feed' | 'story' | 'predictions'
-  const[activeId,setActiveId]=useState(null)
   const[activeTab,setActiveTab]=useState('feed')
   const[profileOpen,setProfileOpen]=useState(false)
   const[historyOpen,setHistoryOpen]=useState(false)
@@ -744,8 +866,26 @@ export default function App(){
   const[streak,setStreak]=useState(0)
   const[notifs,setNotifs]=useState([])
   const[storiesData,setStoriesData]=useState(fallbackStories)
-  const[storiesLoading,setStoriesLoading]=useState(false)
+  const[storiesLoading,setStoriesLoading]=useState(true)
   const[storiesError,setStoriesError]=useState('')
+
+  const openStory = (id) => {
+    navigate(`/story/${id}`)
+    const s = storiesData.find(x => x.id === id)
+    if (s) {
+      setReadingHistory(p => {
+        const next = [{ storyId: s.id, title: s.title, lastOpened: Date.now() }, ...p.filter(x => x.storyId !== s.id)].slice(0, 20)
+        save(LS.HISTORY, next)
+        return next
+      })
+    }
+  }
+
+  const goHome = () => navigate('/')
+  const goPredictions = () => { setProfileOpen(false); navigate('/predictions') }
+  const toggleDark = () => { const next = !darkMode; setDarkMode(next); save(LS.DARK, next); document.documentElement.classList.toggle('dark', next) }
+
+  // Effects and handlers continue below...
 
   useEffect(()=>{
     const dm=load(LS.DARK,false);setDarkMode(dm);document.documentElement.classList.toggle('dark',dm)
@@ -764,9 +904,7 @@ export default function App(){
 
   useEffect(()=>{
     if(!ready||!onboarded)return
-
     let cancelled=false
-
     const loadStories=async()=>{
       setStoriesLoading(true)
       setStoriesError('')
@@ -782,12 +920,10 @@ export default function App(){
         if(!cancelled)setStoriesLoading(false)
       }
     }
-
     loadStories()
     return()=>{cancelled=true}
   },[ready,onboarded,interests])
 
-  // simulate notifications for followed stories that were "updated"
   useEffect(()=>{
     if(!ready)return
     const dismissed=load(LS.NOTIFS,[])
@@ -798,24 +934,13 @@ export default function App(){
     setNotifs(pending)
   },[ready,followedIds,simulatedByStory,storiesData])
 
-  const toggleDark=()=>setDarkMode(p=>{const n=!p;document.documentElement.classList.toggle('dark',n);save(LS.DARK,n);return n})
-  const activeStory=storiesData.find(s=>s.id===activeId)
-
   const finishOnboarding=chosen=>{setInterests(chosen);save(LS.INTERESTS,chosen);setOnboarded(true);save(LS.ONBOARDED,true)}
   const restartOnboarding=()=>{
     setProfileOpen(false);setHistoryOpen(false);setSearchQuery('')
-    setScreen('feed');setActiveId(null)
+    navigate('/');setActiveTab('feed')
     setOnboarded(false);save(LS.ONBOARDED,false)
   }
 
-  const openStory=id=>{
-    setProfileOpen(false);setHistoryOpen(false)
-    setScreen('story');setActiveId(id)
-    const s=storiesData.find(x=>x.id===id);if(!s)return
-    setReadingHistory(prev=>{const next=[{storyId:s.id,title:s.title,lastOpened:Date.now()},...prev.filter(h=>h.storyId!==s.id)];save(LS.HISTORY,next);return next})
-    window.scrollTo(0,0)
-  }
-  const goHome=()=>{setScreen('feed');setActiveId(null);setProfileOpen(false);setHistoryOpen(false);setSearchQuery('')}
   const toggleFollow=id=>setFollowedIds(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];save(LS.FOLLOWED,next);return next})
   const toggleBookmark=id=>setBookmarks(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];save(LS.BOOKMARKS,next);return next})
   const saveAnswer=(storyId,optIdx,optLabel)=>setUserAnswers(prev=>{const next={...prev,[String(storyId)]:{optionIndex:optIdx,optionLabel:optLabel,savedAt:Date.now()}};save(LS.ANSWERS,next);return next})
@@ -831,8 +956,6 @@ export default function App(){
     save(LS.NOTIFS,[...dismissed,storyId])
   }
 
-  const savedForActive=activeStory?(userAnswers[String(activeStory.id)]??null):null
-
   if(!ready)return<div className="fixed inset-0 flex items-center justify-center bg-white dark:bg-slate-950"><div className="w-7 h-7 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/></div>
   if(!onboarded)return<Onboarding onDone={finishOnboarding}/>
 
@@ -844,7 +967,7 @@ export default function App(){
         onToggleHistory={()=>{setHistoryOpen(p=>!p);setProfileOpen(false)}}
         profileOpen={profileOpen} historyOpen={historyOpen}
         darkMode={darkMode} onToggleDark={toggleDark}
-        searchQuery={searchQuery} onSearch={q=>{setSearchQuery(q);setScreen('feed');setActiveId(null)}}
+        searchQuery={searchQuery} onSearch={q=>{setSearchQuery(q); if(location.pathname!=='/') navigate('/')}}
         onFeedback={()=>setFeedbackOpen(true)}
         streak={streak}
         notifCount={notifs.length}
@@ -852,11 +975,10 @@ export default function App(){
 
       <NotifBanner notifs={notifs} onDismiss={dismissNotif} onOpenStory={id=>{dismissNotif(id);openStory(id)}}/>
 
-      {profileOpen&&<ProfilePanel onClose={()=>setProfileOpen(false)} followedIds={followedIds} readingHistory={readingHistory} interests={interests} allFeedback={allFeedback} streak={streak} onShowPredictions={()=>{setProfileOpen(false);setScreen('predictions')}}/>}
+      {profileOpen&&<ProfilePanel onClose={()=>setProfileOpen(false)} followedIds={followedIds} readingHistory={readingHistory} interests={interests} allFeedback={allFeedback} streak={streak} onShowPredictions={goPredictions}/>}
       {historyOpen&&<HistoryDrawer items={readingHistory} onClose={()=>setHistoryOpen(false)} onPickStory={id=>{setHistoryOpen(false);openStory(id)}}/>}
       {feedbackOpen&&<FeedbackModal onClose={()=>setFeedbackOpen(false)} onSubmit={submitFeedback}/>}
 
-      {/* quick way to revisit the "Get started" flow */}
       <div className="fixed bottom-5 right-5 z-30">
         <button onClick={restartOnboarding} className="rounded-full bg-slate-900/90 dark:bg-white/90 text-white dark:text-slate-900 px-4 py-2 text-xs font-bold shadow-lg border border-slate-800/20 dark:border-white/30 hover:opacity-95 transition">
           Re-pick topics
@@ -864,24 +986,63 @@ export default function App(){
       </div>
 
       <main className="pt-[54px]">
-        {screen==='story'&&activeStory?(
-          <StoryView key={activeStory.id} story={activeStory} isFollowing={followedIds.includes(activeStory.id)} onToggleFollow={()=>toggleFollow(activeStory.id)} savedAnswer={savedForActive} onSaveAnswer={saveAnswer} showSimulatedUpdate={!!simulatedByStory[String(activeStory.id)]} onSimulateUpdate={()=>revealSimulated(activeStory.id)} onBack={goHome} onFeedback={()=>setFeedbackOpen(true)} annotations={annotations} onSaveAnnotation={saveAnnotation} isBookmarked={bookmarks.includes(activeStory.id)} onToggleBookmark={toggleBookmark}/>
-        ):screen==='predictions'?(
-          <PredictionsScreen stories={storiesData} userAnswers={userAnswers} simulatedByStory={simulatedByStory} onOpenStory={id=>{setScreen('story');openStory(id)}} onBack={goHome}/>
-        ):(
-          <>
-            {storiesError&&<div className="mx-auto max-w-3xl px-4 pt-4"><div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">{storiesError}</div></div>}
-            {storiesLoading?(
+        <Routes>
+          <Route path="/" element={
+            <>
+              {storiesError&&<div className="mx-auto max-w-3xl px-4 pt-4"><div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">{storiesError}</div></div>}
+              {storiesLoading?(
+                <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+                  <div className="mx-auto w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/>
+                  <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading your daily news feed...</p>
+                </div>
+              ):(
+                <Feed stories={storiesData} followedIds={followedIds} readingHistory={readingHistory} onOpen={openStory} searchQuery={searchQuery} interests={interests} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} activeTab={activeTab} onTabChange={setActiveTab}/>
+              )}
+            </>
+          } />
+          <Route path="/story/:storyId" element={
+            storiesLoading ? (
               <div className="mx-auto max-w-3xl px-4 py-24 text-center">
                 <div className="mx-auto w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/>
-                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading your daily news feed...</p>
+                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading story details...</p>
               </div>
-            ):(
-              <Feed stories={storiesData} followedIds={followedIds} readingHistory={readingHistory} onOpen={openStory} searchQuery={searchQuery} interests={interests} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} activeTab={activeTab} onTabChange={setActiveTab}/>
-            )}
-          </>
-        )}
+            ) : (
+              <StoryView 
+                storiesData={storiesData} 
+                isFollowing={followedIds} 
+                onToggleFollow={toggleFollow} 
+                savedAnswer={userAnswers} 
+                onSaveAnswer={saveAnswer} 
+                showSimulatedUpdate={simulatedByStory} 
+                onSimulateUpdate={revealSimulated} 
+                onBack={goHome} 
+                onFeedback={()=>setFeedbackOpen(true)} 
+                annotations={annotations} 
+                onSaveAnnotation={saveAnnotation} 
+                isBookmarked={bookmarks} 
+                onToggleBookmark={toggleBookmark}
+              />
+            )
+          } />
+          <Route path="/predictions" element={
+            storiesLoading ? (
+              <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+                <div className="mx-auto w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/>
+              </div>
+            ) : (
+              <PredictionsScreen stories={storiesData} userAnswers={userAnswers} simulatedByStory={simulatedByStory} onOpenStory={openStory} onBack={goHome}/>
+            )
+          } />
+          {/* Catch-all to redirect back home if path is invalid during early load */}
+          <Route path="*" element={<div className="py-24 text-center"><p className="text-slate-500">Wait a moment while we find that page...</p><button onClick={goHome} className="mt-4 text-indigo-500 font-bold">Go to Feed</button></div>} />
+        </Routes>
       </main>
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AppContent />
   )
 }

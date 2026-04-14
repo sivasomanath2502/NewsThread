@@ -1,6 +1,6 @@
 import { stories as fallbackStories } from './stories.js'
 
-const CACHE_PREFIX = 'nt_daily_news_v3'
+const CACHE_PREFIX = 'nt_daily_news_v4'
 const DEFAULT_INTERESTS = ['Politics', 'Technology', 'Health', 'Science', 'Climate']
 
 const INTEREST_QUERY_MAP = {
@@ -15,14 +15,15 @@ const INTEREST_QUERY_MAP = {
 }
 
 const QUESTION_BANK = {
-  Politics: ['Tighter regulation', 'More public debate', 'Slow implementation'],
-  Finance: ['Markets rise', 'Markets fall', 'Little immediate change'],
-  Technology: ['Faster adoption', 'Stricter oversight', 'Mixed rollout'],
+  Politics: ['Tighter regulation', 'More public debate', 'Laws are delayed'],
+  Finance: ['Market values rise', 'Values fall/adjust', 'Little immediate change'],
+  Technology: ['Faster adoption', 'Stricter oversight', 'Mixed public rollout'],
   Climate: ['Policy action increases', 'Impact worsens first', 'Progress stays uneven'],
   Health: ['Public concern rises', 'Officials add support', 'The issue fades quickly'],
   Urban: ['Services improve', 'Disruptions continue', 'Change remains uneven'],
   Science: ['Breakthrough accelerates', 'Caution slows rollout', 'Interest grows steadily'],
   Economy: ['Growth picks up', 'Pressure on households rises', 'Conditions stay mixed'],
+  Culture: ['Value increases significantly', 'Controversy sparks debate', 'Public interest fades'],
 }
 
 const DEFAULT_QUESTION = ['Positive turn', 'Negative turn', 'Mixed outcome']
@@ -54,6 +55,7 @@ function inferCategory(article, selectedInterests) {
     ['Urban', ['metro', 'traffic', 'transit', 'water', 'city', 'infrastructure']],
     ['Science', ['science', 'research', 'space', 'nasa', 'isro', 'study']],
     ['Politics', ['election', 'minister', 'parliament', 'policy', 'government', 'court']],
+    ['Culture', ['art', 'painting', 'music', 'kanye', 'celebrity', 'hollywood', 'entertainment', 'museum']],
   ]
 
   let bestCategory = 'General'
@@ -71,9 +73,7 @@ function inferCategory(article, selectedInterests) {
     }
   }
 
-  // Be conservative: only assign a specific category for stronger signals.
   if (bestScore >= 2) return bestCategory
-
   return 'General'
 }
 
@@ -169,16 +169,54 @@ function buildRecap(article) {
 
 function toStory(article, index, selectedInterests) {
   const category = inferCategory(article, selectedInterests)
-  const questionOptions = QUESTION_BANK[category] || DEFAULT_QUESTION
-  const articleBody = [article.description, article.content, article.url && `Read the original article: ${article.url}`]
-    .filter(Boolean)
-    .join('\n\n')
+  
+  // Strip NewsAPI truncation characters
+  let cleanContent = (article.content || '').replace(/\[\+\d+\s*chars\]/g, '').trim();
+  
+  // Ensure we don't end on incomplete sentences
+  const ensureCompleteSentence = (text) => {
+    if (!text) return '';
+    if (text.endsWith('...') || text.endsWith('…') || !/[.!?]$/.test(text)) {
+      let boundary = -1;
+      for (let i = text.length - 1; i >= 0; i--) {
+        if (['.', '!', '?'].includes(text[i])) {
+          boundary = i;
+          break;
+        }
+      }
+      if (boundary > 0) {
+        return text.substring(0, boundary + 1).trim();
+      }
+    }
+    return text.trim();
+  };
+
+  const finalContent = ensureCompleteSentence(cleanContent);
+  const finalDesc = ensureCompleteSentence(article.description);
+
+  let bodyList = [finalDesc];
+  if (finalContent && finalContent !== finalDesc && !finalContent.startsWith(finalDesc)) {
+    bodyList.push(finalContent);
+  }
+
+  const articleBody = bodyList.filter(Boolean).join('\n\n');
+
+  // Make question more related to the article
+  const titleKeywords = (article.title || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).slice(0, 3).join(' ') || category;
+  const questionText = `What do you predict will happen next in the "${titleKeywords}" story?`;
+  
+  // Use category-specific options if available, otherwise fall back to generic but sensible ones
+  const questionOptions = QUESTION_BANK[category] || [
+    `Situation improves or resolves`,
+    `Further complications arise`,
+    `No significant change expected`
+  ];
 
   return {
     id: `newsapi-${index}-${article.publishedAt || Date.now()}`,
     title: article.title || 'Untitled article',
     category,
-    description: article.description || 'Latest article from your selected topics.',
+    description: finalDesc || 'Latest article from your selected topics.',
     tag: article.source?.name || 'Live update',
     readTime: '3 min',
     imageUrl: article.urlToImage || '',
@@ -186,7 +224,7 @@ function toStory(article, index, selectedInterests) {
     recap: buildRecap(article),
     article: articleBody,
     question: {
-      text: 'What do you think happens next?',
+      text: questionText,
       options: questionOptions,
     },
     simulatedUpdate: null,
