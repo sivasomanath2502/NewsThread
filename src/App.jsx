@@ -1,8 +1,39 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { fallbackStories, fetchDailyStories, fetchRelatedTimeline } from './newsApi.js'
 import { summarizeTimelineWithLocalModel } from './localRecap.js'
 import JargonText from './JargonText.jsx'
+import { JargonWord } from './JargonWord.jsx'
+import { JARGON_GLOSSARY } from './glossary.js'
+import { stories as protoStories } from './stories.jsx'
+
+/* ─── Common-words filter for inline jargon detection ────────── */
+const COMMON_WORDS = new Set([
+  'everything','themselves','completely','understanding','government','afternoon',
+  'development','information','technology','experience','especially',
+  'important','something','sometimes','generation','community','beautiful',
+  'different','available','therefore','investigate','department','performance',
+  'significant','management','situation','developing','developments',
+  'predict','prediction','predicting','happened','happening','actually',
+  'outcomes','outcome','resolved','escalates','escalated','timeline','emerging',
+  'headline','headlines','description','published','publishedat','yesterday','tomorrow'
+]);
+
+function JargonParagraph({text}) {
+  const tokens = String(text||'').split(/([a-zA-Z]+)/);
+  return (
+    <>
+      {tokens.map((tok, i) => {
+        if (!/^[a-zA-Z]+$/.test(tok)) return <span key={i}>{tok}</span>;
+        const low = tok.toLowerCase();
+        if (JARGON_GLOSSARY[low] || (low.length >= 9 && !COMMON_WORDS.has(low))) {
+          return <JargonWord key={i} word={tok} />
+        }
+        return <span key={i}>{tok}</span>;
+      })}
+    </>
+  )
+}
 
 /* ─── storage helpers ───────────────────────────────────────── */
 const LS = {
@@ -10,7 +41,20 @@ const LS = {
   SIMULATED:'nt_simulated', ONBOARDED:'nt_onboarded', INTERESTS:'nt_interests',
   DARK:'nt_dark', FEEDBACK:'nt_feedback', ANNOTATIONS:'nt_annotations',
   BOOKMARKS:'nt_bookmarks', STREAK:'nt_streak', NOTIFS:'nt_notifs',
+  NEWS_BOOKMARKS:'nt_news_bookmarks',
 }
+
+const NEWS_CATEGORIES=[
+  {id:'',label:'All'},
+  {id:'general',label:'General'},
+  {id:'business',label:'Business'},
+  {id:'technology',label:'Technology'},
+  {id:'science',label:'Science'},
+  {id:'health',label:'Health'},
+  {id:'sports',label:'Sports'},
+  {id:'entertainment',label:'Entertainment'},
+]
+
 const load=(k,fb)=>{try{const r=localStorage.getItem(k);return r==null?fb:JSON.parse(r)}catch{return fb}}
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
 const relTime=ts=>{
@@ -195,7 +239,7 @@ function Navbar({onGoHome,onToggleProfile,onToggleHistory,profileOpen,historyOpe
   )
 }
 
-/* ─── Category filter bar ────────────────────────────────────── */
+/* ─── Category filter bar (for story threads) ────────────────── */
 function CategoryBar({categories,active,onChange}){
   return(
     <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -207,7 +251,145 @@ function CategoryBar({categories,active,onChange}){
   )
 }
 
-/* ─── Story card ─────────────────────────────────────────────── */
+/* ─── Live news card (from prototype) ────────────────────────── */
+function NewsCard({article,onOpen,isBookmarked,onToggleBookmark}){
+  const[imgOk,setImgOk]=useState(true)
+  const hasImg=article.urlToImage&&imgOk
+  return(
+    <div className="relative group">
+      <button type="button" onClick={()=>onOpen(article)} className="w-full text-left rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-700 transition-all duration-200 overflow-hidden active:scale-[0.99]">
+        {hasImg?(
+          <div className="aspect-[16/10] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+            <img src={article.urlToImage} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" onError={()=>setImgOk(false)}/>
+          </div>
+        ):(
+          <div className="aspect-[16/10] w-full bg-gradient-to-br from-slate-100 via-indigo-50 to-violet-100 dark:from-slate-800 dark:via-indigo-950 dark:to-slate-900 flex items-center justify-center text-4xl">📰</div>
+        )}
+        <div className="p-4 sm:p-5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-indigo-500 dark:text-indigo-400 mb-1.5 truncate">{article.source||'News'}</p>
+          <h2 className="text-[16px] sm:text-[17px] font-bold leading-snug text-slate-900 dark:text-white line-clamp-3 pr-6" style={{fontFamily:'Georgia,serif'}}>{article.title}</h2>
+          {article.description&&<p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2">{article.description}</p>}
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <time className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">{article.publishedAt?new Date(article.publishedAt).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}):''}</time>
+            <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 group-hover:gap-2 transition-all">Open <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M2 6h8M7 3l3 3-3 3"/></svg></span>
+          </div>
+        </div>
+      </button>
+      <button type="button" onClick={e=>{e.stopPropagation();onToggleBookmark(article)}}
+        className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700 shadow-sm transition-all hover:scale-110 active:scale-95"
+        title={isBookmarked?'Remove bookmark':'Bookmark'}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill={isBookmarked?'#6366f1':'none'} stroke={isBookmarked?'#6366f1':'#cbd5e1'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+/* ─── News category bar ──────────────────────────────────────── */
+function NewsCategoryBar({active,onChange}){
+  return(
+    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {NEWS_CATEGORIES.map(c=>{
+        const isA=active===c.id
+        return(
+          <button key={c.id||'all'} type="button" onClick={()=>onChange(c.id)} className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition border ${isA?'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent':'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-400'}`}>{c.label}</button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── Live news feed (from prototype) ────────────────────────── */
+function NewsFeed({articles,loading,error,searchQuery,onOpen,newsBookmarks,onToggleBookmark,activeTab,onTabChange,newsCategory,onNewsCategory,onRefresh,refreshing}){
+  const matchSearch=a=>{
+    const q=searchQuery.trim().toLowerCase()
+    if(!q)return true
+    return`${a.title} ${a.description} ${a.source}`.toLowerCase().includes(q)
+  }
+  const fromFeed=articles.filter(matchSearch)
+  const fromSaved=newsBookmarks.filter(matchSearch)
+  const list=activeTab==='bookmarks'?fromSaved:fromFeed
+
+  return(
+    <div className="mx-auto max-w-3xl px-4 pb-24 pt-4">
+      {!searchQuery&&(
+        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-indigo-500 mb-1">Live headlines</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white" style={{fontFamily:'Georgia,serif'}}>Latest news</h1>
+            <p className="mt-1 text-[13px] text-slate-400">Updates from NewsAPI · cached 15 min on the server</p>
+          </div>
+          <button type="button" onClick={onRefresh} disabled={loading||refreshing} className="shrink-0 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition active:scale-[0.98]">
+            {loading||refreshing?'Refreshing…':'🔄 Refresh news'}
+          </button>
+        </header>
+      )}
+
+      {!searchQuery&&(
+        <div className="flex gap-2 mb-5">
+          {[['feed','Latest'],['bookmarks','Bookmarks']].map(([tab,label])=>(
+            <button key={tab} type="button" onClick={()=>onTabChange(tab)} className={`rounded-full px-4 py-1.5 text-xs font-bold transition border ${activeTab===tab?'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent':'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'}`}>
+              {label}{tab==='bookmarks'&&newsBookmarks.length>0&&<span className="ml-1 text-indigo-400">({newsBookmarks.length})</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!searchQuery&&activeTab==='feed'&&<div className="mb-5"><NewsCategoryBar active={newsCategory} onChange={onNewsCategory}/></div>}
+
+      {searchQuery&&<p className="mb-5 text-sm text-slate-500 dark:text-slate-400">{list.length===0?'No results for ':`${list.length} result${list.length!==1?'s':''} for `}<span className="font-semibold text-slate-800 dark:text-white">"{searchQuery}"</span></p>}
+
+      {error&&(
+        <div className="rounded-2xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 px-4 py-3 text-sm text-rose-800 dark:text-rose-200 mb-6">
+          <p className="font-bold">Could not load headlines</p>
+          <p className="mt-1 text-rose-700/90 dark:text-rose-300/90">{error}</p>
+          <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">Add <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">NEWS_API_KEY</code> to <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">.env</code> and restart <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">npm run dev</code>.</p>
+        </div>
+      )}
+
+      {activeTab==='bookmarks'&&newsBookmarks.length===0&&(
+        <div className="py-20 text-center">
+          <p className="text-4xl mb-3">🔖</p>
+          <p className="font-semibold text-slate-700 dark:text-slate-300">No bookmarks yet</p>
+          <p className="text-sm text-slate-400 mt-1">Save articles from Latest to read them later</p>
+        </div>
+      )}
+
+      {loading&&articles.length===0&&!error&&(
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[1,2,3,4].map(i=>(
+            <div key={i} className="rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-pulse">
+              <div className="aspect-[16/10] bg-slate-200 dark:bg-slate-800"/>
+              <div className="p-5 space-y-2">
+                <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/3"/>
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full"/>
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-5/6"/>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading||articles.length>0?(
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {list.map((a,i)=>(
+            <NewsCard key={a.url||`card-${i}-${a.title?.slice(0,24)}`} article={a} onOpen={onOpen} isBookmarked={newsBookmarks.some(b=>b.url===a.url)} onToggleBookmark={onToggleBookmark}/>
+          ))}
+        </div>
+      ):null}
+
+      {!loading&&activeTab!=='bookmarks'&&fromFeed.length===0&&!error&&(
+        <div className="py-24 text-center">
+          <p className="text-5xl mb-4">🔍</p>
+          <p className="text-slate-500 dark:text-slate-400">No headlines match your filters</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Story card (for story threads) ─────────────────────────── */
 function StoryCard({story,onOpen,isFollowing,isRead,isBookmarked,onToggleBookmark}){
   const st=cs(story.category)
   return(
@@ -224,13 +406,7 @@ function StoryCard({story,onOpen,isFollowing,isRead,isBookmarked,onToggleBookmar
 
         {story.imageUrl&&(
           <div className="mb-3 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-            <img
-              src={story.imageUrl}
-              alt=""
-              loading="lazy"
-              className="h-36 w-full object-cover"
-              onError={(e)=>{e.currentTarget.style.display='none'}}
-            />
+            <img src={story.imageUrl} alt="" loading="lazy" className="h-36 w-full object-cover" onError={(e)=>{e.currentTarget.style.display='none'}}/>
           </div>
         )}
 
@@ -252,7 +428,6 @@ function StoryCard({story,onOpen,isFollowing,isRead,isBookmarked,onToggleBookmar
           <span className="text-[11px] text-slate-300 dark:text-slate-600">{story.timeline.length} events</span>
         </div>
       </button>
-      {/* bookmark button overlaid */}
       <button onClick={e=>{e.stopPropagation();onToggleBookmark(story.id)}}
         className="absolute top-4 right-4 w-7 h-7 flex items-center justify-center rounded-full transition-all hover:scale-110 active:scale-95"
         title={isBookmarked?'Remove bookmark':'Bookmark'}>
@@ -264,7 +439,7 @@ function StoryCard({story,onOpen,isFollowing,isRead,isBookmarked,onToggleBookmar
   )
 }
 
-/* ─── Feed ───────────────────────────────────────────────────── */
+/* ─── Story Thread Feed ──────────────────────────────────────── */
 function Feed({stories,followedIds,readingHistory,onOpen,searchQuery,bookmarks,onToggleBookmark,activeTab,onTabChange}){
   const[activeCat,setActiveCat]=useState('')
   const readIds=new Set(readingHistory.map(h=>h.storyId))
@@ -288,7 +463,6 @@ function Feed({stories,followedIds,readingHistory,onOpen,searchQuery,bookmarks,o
         </header>
       )}
 
-      {/* tab bar */}
       {!searchQuery&&(
         <div className="flex gap-2 mb-5">
           {[['feed','Feed'],['bookmarks','Bookmarks']].map(([tab,label])=>(
@@ -303,7 +477,6 @@ function Feed({stories,followedIds,readingHistory,onOpen,searchQuery,bookmarks,o
 
       {searchQuery&&<p className="mb-5 text-sm text-slate-500 dark:text-slate-400">{filtered.length===0?'No results for ':`${filtered.length} result${filtered.length!==1?'s':''} for `}<span className="font-semibold text-slate-800 dark:text-white">"{searchQuery}"</span></p>}
 
-      {/* bookmarks empty state */}
       {activeTab==='bookmarks'&&bookmarks.length===0&&(
         <div className="py-20 text-center">
           <p className="text-4xl mb-3">🔖</p>
@@ -325,11 +498,12 @@ function Feed({stories,followedIds,readingHistory,onOpen,searchQuery,bookmarks,o
   )
 }
 
-/* ─── Story view ─────────────────────────────────────────────── */
+/* ─── Story view (merged: main + prototype features) ─────────── */
 function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAnswer,showSimulatedUpdate,onSimulateUpdate,onBack,onFeedback,annotations,onSaveAnnotation,isBookmarked,onToggleBookmark}){
   const { storyId } = useParams()
   const story = storiesData.find(s => String(s.id) === String(storyId))
   
+  const articleRef=useRef(null)
   const[expandedIndex,setExpandedIndex]=useState(null)
   const[annotatingIndex,setAnnotatingIndex]=useState(null)
   const[annotationDraft,setAnnotationDraft]=useState('')
@@ -338,8 +512,9 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
   const[progress,setProgress]=useState(0)
   const[copied,setCopied]=useState(false)
   const[isPlaying,setIsPlaying]=useState(false)
-  const[expandedText,setExpandedText]=useState(null)
-  const[expanding,setExpanding]=useState(false)
+  const[articleFull,setArticleFull]=useState(null)       // full text from /api/article
+  const[articleFetching,setArticleFetching]=useState(false)
+  const[articleFetchErr,setArticleFetchErr]=useState('')
   const[relatedTimeline,setRelatedTimeline]=useState([])
   const[relErr,setRelErr]=useState('')
   const[recapLines,setRecapLines]=useState([
@@ -419,11 +594,12 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
       setIsPlaying(false)
       return
     }
+    const articleText = typeof story.article === 'string' ? story.article : story.description || ''
     const textToSpeak = `
       Title: ${story.title}.
       Thread Timeline: ${timelineToShow.map(t => `${t.date}, ${t.event}. ${t.details}`).join('. ')}.
       AI Recap: ${recapLines.map((l, i) => `Point ${i + 1}. ${l}`).join(' ')}.
-      Today's Full Article: ${(expandedText || story.article).replace(/\[\+\d+\s*chars\]/g, '').replace(/Read the original article:\s*https?:\/\/[^\s]+/i, '').replace(/\n/g, '. ')}.
+      Today's Full Article: ${(expandedText || articleText).replace(/\[\+\d+\s*chars\]/g, '').replace(/Read the original article:\s*https?:\/\/[^\s]+/i, '').replace(/\n/g, '. ')}.
     `;
     const utterance = new SpeechSynthesisUtterance(textToSpeak)
     utterance.onend = () => setIsPlaying(false)
@@ -435,55 +611,47 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
     return () => window.speechSynthesis.cancel()
   }, [])
 
-  const handleExpandArticle = async () => {
-    if(!story.sourceUrl) return
-    setExpanding(true)
-    const proxies = [
-      `https://api.allorigins.win/get?url=${encodeURIComponent(story.sourceUrl)}`,
-      `https://corsproxy.io/?${encodeURIComponent(story.sourceUrl)}`
-    ]
-    
-    let success = false
-    for (const url of proxies) {
-      if (success) break
-      try {
-        const res = await fetch(url)
-        if (!res.ok) continue
-        
-        let html = ''
-        if (url.includes('allorigins')) {
-          const data = await res.json()
-          html = data.contents
-        } else {
-          html = await res.text()
+  // Auto-fetch full article via Express server when story URL is available
+  useEffect(()=>{
+    let cancelled=false
+    setArticleFull(null)
+    setArticleFetchErr('')
+    const url=story?.sourceUrl||story?.url
+    // Only fetch for non-JSX articles that have a source URL
+    if(!url||typeof story?.article!=='string')return
+    setArticleFetching(true)
+    ;(async()=>{
+      try{
+        const res=await fetch(`/api/article?url=${encodeURIComponent(url)}`)
+        const data=await res.json()
+        if(cancelled)return
+        if(data.success&&data.text){
+          setArticleFull(data.text)
+        }else{
+          setArticleFetchErr(data.error||'Could not load full article')
         }
-
-        const doc = new DOMParser().parseFromString(html, 'text/html')
-        const pTags = Array.from(doc.querySelectorAll('p'))
-        const text = pTags.map(p => p.textContent.trim()).filter(t => t.length > 50).join('\n\n')
-        
-        if (text && text.length > 100) {
-          setExpandedText(text)
-          success = true
-        }
-      } catch (e) {
-        console.warn(`Proxy ${url} failed`, e)
+      }catch(e){
+        if(!cancelled)setArticleFetchErr(e.message||'Network error')
+      }finally{
+        if(!cancelled)setArticleFetching(false)
       }
-    }
-
-    if (!success) {
-      alert('Note: This news site might be blocking automated access or the article is behind a paywall. You can read it directly via the "Read full article" link below.')
-    }
-    setExpanding(false)
-  }
+    })()
+    return()=>{cancelled=true}
+  },[story?.id])
 
   const predictedLabel=currentAnswer?.optionLabel??(selectedOption!==null?story.question.options[selectedOption]:null)
   const st=cs(story.category)
 
-  // Clean the cached article so it doesn't show "Read the original article:" inline
-  const rawArticle = (expandedText || story.article).replace(/Read the original article:\s*https?:\/\/[^\s]+/i, '').trim();
-  const hasTruncation = !expandedText && !!rawArticle.match(/\[\+\d+\s*chars\]/i);
-  const displayArticleText = rawArticle.replace(/\[\+\d+\s*chars\]/i, '').trim();
+  // Determine article content — could be JSX (from stories.jsx) or string (from newsApi)
+  const articleIsJSX = typeof story.article !== 'string' && story.article != null
+  // Prefer full fetched text, fallback to story.article (cleaned)
+  const rawArticleStr = articleIsJSX ? '' : (
+    articleFull ||
+    String(story.article||'')
+      .replace(/Read the original article:\s*https?:\/\/[^\s]+/i,'')
+      .replace(/\[\+\d+\s*chars\]/i,'')
+      .trim()
+  )
 
   return(
     <div className="pb-24">
@@ -505,12 +673,13 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
             <span className="text-xs text-slate-400 dark:text-slate-500">{story.readTime} · {story.timeline.length} events</span>
           </div>
           <h1 className="text-lg sm:text-xl font-bold leading-snug text-slate-900 dark:text-white" style={{fontFamily:'Georgia,serif'}}><JargonText text={story.title}/></h1>
+          <p className="mt-2 text-slate-500 dark:text-slate-400 leading-relaxed">{story.description}</p>
         </div>
       </div>
 
       <div className="mx-auto max-w-3xl px-4 pt-8 space-y-10">
 
-        {/* ── THREAD with LINKS (shown first) ── */}
+        {/* ── THREAD with LINKS ── */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2"><div className="w-1 h-5 rounded-full bg-amber-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">🧵 Thread — timeline</span></div>
@@ -599,7 +768,7 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
         <section>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2"><div className="w-1 h-5 rounded-full bg-emerald-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">🤖 AI Recap</span></div>
-            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">3-line catch-up</span>
+            <button onClick={()=>articleRef.current?.scrollIntoView({behavior:'smooth',block:'start'})} className="text-[11px] font-bold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition">Skip to article ↓</button>
           </div>
           <div className="rounded-3xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 p-5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-500 mb-4">3-line personalised catch-up</p>
@@ -612,33 +781,63 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
         </section>
 
         {/* ── FULL ARTICLE ── */}
-        {(expandedText || story.article) && (
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2"><div className="w-1 h-5 rounded-full bg-blue-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">📰 Today's Full Article</span></div>
+        <section ref={articleRef} className="scroll-mt-20">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-1 h-5 rounded-full bg-blue-500"/>
+              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">📰 Today's Full Article</span>
             </div>
-            <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-5 space-y-4">
-              {displayArticleText.split('\n\n').map((para, i, arr) => (
-                <p key={i} className="text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">
-                  <JargonText text={para}/>
-                  {hasTruncation && i === arr.length - 1 && (
-                    <button onClick={handleExpandArticle} disabled={expanding} className="ml-2 inline-block text-[13px] font-bold text-indigo-500 hover:text-indigo-700 disabled:opacity-50 cursor-pointer transition">
-                      {expanding ? 'Expanding...' : '... Show more'}
-                    </button>
-                  )}
-                </p>
-              ))}
-              {story.sourceUrl && (
-                <div className="pt-2">
-                  <a href={story.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1.5">
-                    Read full article on {story.tag === 'Live update' ? 'original source' : story.tag}
-                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 3h6v6M11 3L3 11"/></svg>
-                  </a>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
+            {articleFetching&&(
+              <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-full border-2 border-blue-400 border-t-transparent animate-spin inline-block"/>
+                Loading full article…
+              </span>
+            )}
+            {articleFull&&!articleFetching&&(
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">✓ Full article loaded</span>
+            )}
+          </div>
+          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-5 space-y-4">
+            {articleIsJSX ? (
+              /* Render JSX articles from stories.jsx (with embedded JargonWord components) */
+              <div>{story.article}</div>
+            ) : articleFetching && !rawArticleStr ? (
+              /* Skeleton while fetching */
+              <div className="space-y-3 animate-pulse">
+                {[1,2,3,4,5].map(i=>(
+                  <div key={i} className={`h-4 bg-slate-200 dark:bg-slate-700 rounded-full ${i===5?'w-2/3':'w-full'}`}/>
+                ))}
+                <div className="h-4 w-full bg-slate-200 dark:bg-slate-700 rounded-full"/>
+                <div className="h-4 w-5/6 bg-slate-200 dark:bg-slate-700 rounded-full"/>
+                <div className="h-4 w-full bg-slate-200 dark:bg-slate-700 rounded-full"/>
+                <div className="h-4 w-3/4 bg-slate-200 dark:bg-slate-700 rounded-full"/>
+              </div>
+            ) : (
+              <>
+                {rawArticleStr.split('\n\n').filter(Boolean).map((para,i)=>(
+                  <p key={i} className="text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">
+                    <JargonParagraph text={para}/>
+                  </p>
+                ))}
+                {articleFetchErr&&!articleFull&&(
+                  <div className="mt-3 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+                    <p className="font-semibold">Couldn't load the full article automatically</p>
+                    <p className="mt-0.5 text-xs opacity-80">{articleFetchErr}</p>
+                    <p className="mt-1 text-xs">The site may require a subscription or block automated access. Use the link below to read it directly.</p>
+                  </div>
+                )}
+              </>
+            )}
+            {(story.sourceUrl||story.url)&&(
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <a href={story.sourceUrl||story.url} target="_blank" rel="noreferrer" className="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1.5">
+                  Read on original source
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 3h6v6M11 3L3 11"/></svg>
+                </a>
+              </div>
+            )}
+          </div>
+        </section>
 
         <section>
           <div className="flex items-center justify-between">
@@ -766,17 +965,17 @@ function DHead({title,sub,onClose}){
   )
 }
 
-function HistoryDrawer({items,onClose,onPickStory}){
+function HistoryDrawer({items,onClose,onPick}){
   return(
     <Drawer onClose={onClose}>
-      <DHead title="Reading history" sub={`${items.length} ${items.length===1?'story':'stories'} read`} onClose={onClose}/>
+      <DHead title="Reading history" sub={`${items.length} ${items.length===1?'item':'items'}`} onClose={onClose}/>
       <ul className="max-h-72 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800 p-2">
-        {items.length===0?<li className="py-10 text-center text-sm text-slate-400">No stories read yet</li>:
+        {items.length===0?<li className="py-10 text-center text-sm text-slate-400">Nothing read yet</li>:
         items.map(row=>(
-          <li key={row.storyId}>
-            <button onClick={()=>onPickStory(row.storyId)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition">
-              <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0"><span className="text-indigo-600 dark:text-indigo-400 text-xs font-bold">{row.title[0]}</span></div>
-              <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{row.title}</p><p className="text-xs text-slate-400">{relTime(row.lastOpened)}</p></div>
+          <li key={row.newsUrl||row.storyId}>
+            <button type="button" onClick={()=>onPick(row)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0"><span className="text-indigo-600 dark:text-indigo-400 text-xs font-bold">{row.title?.[0]??'·'}</span></div>
+              <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{row.title}</p><p className="text-xs text-slate-400">{relTime(row.lastOpened)}{row.newsUrl&&<span className="ml-1 text-indigo-400">· Live</span>}</p></div>
               <svg className="shrink-0 text-slate-300 dark:text-slate-600" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 3l5 5-5 5"/></svg>
             </button>
           </li>
@@ -842,7 +1041,6 @@ function updateStreak(){
   return newStreak
 }
 
-/* ─── App ────────────────────────────────────────────────────── */
 /* ─── App Content (Inside Router) ───────────────────────────── */
 function AppContent() {
   const navigate = useNavigate()
@@ -869,9 +1067,18 @@ function AppContent() {
   const[storiesLoading,setStoriesLoading]=useState(true)
   const[storiesError,setStoriesError]=useState('')
 
+  // ── Live news state (from prototype) ──
+  const[newsArticles,setNewsArticles]=useState([])
+  const[newsLoading,setNewsLoading]=useState(true)
+  const[newsError,setNewsError]=useState(null)
+  const[newsCategory,setNewsCategory]=useState('')
+  const[newsRefreshTick,setNewsRefreshTick]=useState(0)
+  const[newsBookmarks,setNewsBookmarks]=useState([])
+  const[feedMode,setFeedMode]=useState('news') // 'news' | 'threads'
+
   const openStory = (id) => {
     navigate(`/story/${id}`)
-    const s = storiesData.find(x => x.id === id)
+    const s = storiesData.find(x => x.id === id) || protoStories.find(x => x.id === id)
     if (s) {
       setReadingHistory(p => {
         const next = [{ storyId: s.id, title: s.title, lastOpened: Date.now() }, ...p.filter(x => x.storyId !== s.id)].slice(0, 20)
@@ -881,11 +1088,76 @@ function AppContent() {
     }
   }
 
+  const openNewsArticle = (article) => {
+    // Convert live news article to a story thread
+    const simulatedStory = {
+      id: article.url,
+      title: article.title,
+      category: 'Live update',
+      description: article.description,
+      tag: 'Live update',
+      readTime: '3 min',
+      sourceUrl: article.url,
+      url: article.url,
+      source: article.source,
+      publishedAt: article.publishedAt,
+      urlToImage: article.urlToImage,
+      imageUrl: article.urlToImage,
+      timeline: [
+        { date: 'Just now', event: 'Headline breaks', details: article.description || 'Details are emerging.' },
+      ],
+      recap: [
+        'Live updates from NewsAPI.',
+        'This is a developing event.',
+        'Predict what happens next.'
+      ],
+      article: `(Live) ${article.description || ''}\n\nSource: ${article.source}`,
+      question: { text: 'What is the most likely outcome?', options: ['Situation escalates', 'Resolved quickly', 'No major impact'] },
+      simulatedUpdate: { actualOutcome: 'True outcomes will unfold over time.', outcomeSummary: 'Pending development' }
+    }
+    // Add to storiesData so it can be found by StoryView
+    setStoriesData(prev => {
+      const exists = prev.some(s => String(s.id) === String(simulatedStory.id))
+      return exists ? prev : [...prev, simulatedStory]
+    })
+    // Record in history
+    setReadingHistory(prev => {
+      const row = { kind: 'news', newsUrl: article.url, storyId: article.url, title: article.title, lastOpened: Date.now(), description: article.description, urlToImage: article.urlToImage, source: article.source, publishedAt: article.publishedAt }
+      const next = [row, ...prev.filter(h => h.newsUrl !== article.url && h.storyId !== article.url)].slice(0, 20)
+      save(LS.HISTORY, next)
+      return next
+    })
+    navigate(`/story/${encodeURIComponent(article.url)}`)
+  }
+
+  const pickFromHistory = (row) => {
+    setHistoryOpen(false)
+    if (row.newsUrl) {
+      openNewsArticle({
+        title: row.title,
+        description: row.description || '',
+        urlToImage: row.urlToImage || '',
+        publishedAt: row.publishedAt || '',
+        source: row.source || '',
+        url: row.newsUrl,
+      })
+    } else {
+      openStory(row.storyId)
+    }
+  }
+
+  const toggleNewsBookmark = (article) => {
+    setNewsBookmarks(prev => {
+      const has = prev.some(a => a.url === article.url)
+      const next = has ? prev.filter(a => a.url !== article.url) : [{ title: article.title, description: article.description || '', urlToImage: article.urlToImage || '', publishedAt: article.publishedAt || '', source: article.source || '', url: article.url }, ...prev]
+      save(LS.NEWS_BOOKMARKS, next)
+      return next
+    })
+  }
+
   const goHome = () => navigate('/')
   const goPredictions = () => { setProfileOpen(false); navigate('/predictions') }
   const toggleDark = () => { const next = !darkMode; setDarkMode(next); save(LS.DARK, next); document.documentElement.classList.toggle('dark', next) }
-
-  // Effects and handlers continue below...
 
   useEffect(()=>{
     const dm=load(LS.DARK,false);setDarkMode(dm);document.documentElement.classList.toggle('dark',dm)
@@ -898,10 +1170,12 @@ function AppContent() {
     setAllFeedback(load(LS.FEEDBACK,[]))
     setAnnotations(load(LS.ANNOTATIONS,{}))
     setBookmarks(load(LS.BOOKMARKS,[]))
+    setNewsBookmarks(load(LS.NEWS_BOOKMARKS,[]))
     setStreak(updateStreak())
     setReady(true)
   },[])
 
+  // Load story threads from NewsAPI
   useEffect(()=>{
     if(!ready||!onboarded)return
     let cancelled=false
@@ -923,6 +1197,32 @@ function AppContent() {
     loadStories()
     return()=>{cancelled=true}
   },[ready,onboarded,interests])
+
+  // Load live news headlines — proxied through Express server (caches 15 min, hides API key)
+  useEffect(()=>{
+    if(!ready||!onboarded)return
+    let cancelled=false
+    ;(async()=>{
+      setNewsLoading(true)
+      setNewsError(null)
+      try{
+        const params=new URLSearchParams()
+        if(newsCategory)params.set('category',newsCategory)
+        // newsRefreshTick > 0 means user clicked Refresh → bust the server cache
+        if(newsRefreshTick>0)params.set('bust','1')
+        const res=await fetch(`/api/news?${params}`)
+        if(!res.ok) throw new Error(`Server error ${res.status}`)
+        const data=await res.json()
+        if(!data.success) throw new Error(data.error||'Could not load headlines')
+        if(!cancelled)setNewsArticles(data.articles||[])
+      }catch(e){
+        if(!cancelled)setNewsError(e.message||'Network error')
+      }finally{
+        if(!cancelled)setNewsLoading(false)
+      }
+    })()
+    return()=>{cancelled=true}
+  },[ready,onboarded,newsCategory,newsRefreshTick])
 
   useEffect(()=>{
     if(!ready)return
@@ -976,7 +1276,7 @@ function AppContent() {
       <NotifBanner notifs={notifs} onDismiss={dismissNotif} onOpenStory={id=>{dismissNotif(id);openStory(id)}}/>
 
       {profileOpen&&<ProfilePanel onClose={()=>setProfileOpen(false)} followedIds={followedIds} readingHistory={readingHistory} interests={interests} allFeedback={allFeedback} streak={streak} onShowPredictions={goPredictions}/>}
-      {historyOpen&&<HistoryDrawer items={readingHistory} onClose={()=>setHistoryOpen(false)} onPickStory={id=>{setHistoryOpen(false);openStory(id)}}/>}
+      {historyOpen&&<HistoryDrawer items={readingHistory} onClose={()=>setHistoryOpen(false)} onPick={pickFromHistory}/>}
       {feedbackOpen&&<FeedbackModal onClose={()=>setFeedbackOpen(false)} onSubmit={submitFeedback}/>}
 
       <div className="fixed bottom-5 right-5 z-30">
@@ -989,40 +1289,64 @@ function AppContent() {
         <Routes>
           <Route path="/" element={
             <>
-              {storiesError&&<div className="mx-auto max-w-3xl px-4 pt-4"><div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">{storiesError}</div></div>}
-              {storiesLoading?(
-                <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-                  <div className="mx-auto w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/>
-                  <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading your daily news feed...</p>
+              {/* Feed mode toggle */}
+              <div className="mx-auto max-w-3xl px-4 pt-4 pb-0">
+                <div className="flex gap-2 mb-0">
+                  {[['news','📡 Live News'],['threads','🧵 Story Threads']].map(([mode,label])=>(
+                    <button key={mode} onClick={()=>setFeedMode(mode)} className={`rounded-full px-4 py-2 text-xs font-bold transition border ${feedMode===mode?'bg-indigo-600 text-white border-transparent':'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-300'}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {feedMode==='news'?(
+                <NewsFeed
+                  articles={newsArticles}
+                  loading={newsLoading}
+                  error={newsError}
+                  searchQuery={searchQuery}
+                  onOpen={openNewsArticle}
+                  newsBookmarks={newsBookmarks}
+                  onToggleBookmark={toggleNewsBookmark}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  newsCategory={newsCategory}
+                  onNewsCategory={setNewsCategory}
+                  onRefresh={()=>setNewsRefreshTick(t=>t+1)}
+                  refreshing={newsLoading&&newsArticles.length>0}
+                />
               ):(
-                <Feed stories={storiesData} followedIds={followedIds} readingHistory={readingHistory} onOpen={openStory} searchQuery={searchQuery} interests={interests} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} activeTab={activeTab} onTabChange={setActiveTab}/>
+                <>
+                  {storiesError&&<div className="mx-auto max-w-3xl px-4 pt-4"><div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">{storiesError}</div></div>}
+                  {storiesLoading?(
+                    <div className="mx-auto max-w-3xl px-4 py-24 text-center">
+                      <div className="mx-auto w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/>
+                      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading your daily news feed...</p>
+                    </div>
+                  ):(
+                    <Feed stories={storiesData} followedIds={followedIds} readingHistory={readingHistory} onOpen={openStory} searchQuery={searchQuery} interests={interests} bookmarks={bookmarks} onToggleBookmark={toggleBookmark} activeTab={activeTab} onTabChange={setActiveTab}/>
+                  )}
+                </>
               )}
             </>
           } />
           <Route path="/story/:storyId" element={
-            storiesLoading ? (
-              <div className="mx-auto max-w-3xl px-4 py-24 text-center">
-                <div className="mx-auto w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/>
-                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading story details...</p>
-              </div>
-            ) : (
-              <StoryView 
-                storiesData={storiesData} 
-                isFollowing={followedIds} 
-                onToggleFollow={toggleFollow} 
-                savedAnswer={userAnswers} 
-                onSaveAnswer={saveAnswer} 
-                showSimulatedUpdate={simulatedByStory} 
-                onSimulateUpdate={revealSimulated} 
-                onBack={goHome} 
-                onFeedback={()=>setFeedbackOpen(true)} 
-                annotations={annotations} 
-                onSaveAnnotation={saveAnnotation} 
-                isBookmarked={bookmarks} 
-                onToggleBookmark={toggleBookmark}
-              />
-            )
+            <StoryView 
+              storiesData={[...storiesData, ...protoStories.filter(ps => !storiesData.some(s => s.id === ps.id))]} 
+              isFollowing={followedIds} 
+              onToggleFollow={toggleFollow} 
+              savedAnswer={userAnswers} 
+              onSaveAnswer={saveAnswer} 
+              showSimulatedUpdate={simulatedByStory} 
+              onSimulateUpdate={revealSimulated} 
+              onBack={goHome} 
+              onFeedback={()=>setFeedbackOpen(true)} 
+              annotations={annotations} 
+              onSaveAnnotation={saveAnnotation} 
+              isBookmarked={bookmarks} 
+              onToggleBookmark={toggleBookmark}
+            />
           } />
           <Route path="/predictions" element={
             storiesLoading ? (
@@ -1030,10 +1354,9 @@ function AppContent() {
                 <div className="mx-auto w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"/>
               </div>
             ) : (
-              <PredictionsScreen stories={storiesData} userAnswers={userAnswers} simulatedByStory={simulatedByStory} onOpenStory={openStory} onBack={goHome}/>
+              <PredictionsScreen stories={[...storiesData, ...protoStories.filter(ps => !storiesData.some(s => s.id === ps.id))]} userAnswers={userAnswers} simulatedByStory={simulatedByStory} onOpenStory={openStory} onBack={goHome}/>
             )
           } />
-          {/* Catch-all to redirect back home if path is invalid during early load */}
           <Route path="*" element={<div className="py-24 text-center"><p className="text-slate-500">Wait a moment while we find that page...</p><button onClick={goHome} className="mt-4 text-indigo-500 font-bold">Go to Feed</button></div>} />
         </Routes>
       </main>

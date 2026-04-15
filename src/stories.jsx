@@ -1,3 +1,5 @@
+import { JargonWord } from './JargonWord.jsx'
+
 export const stories = [
   {
     id: 1,
@@ -17,11 +19,20 @@ export const stories = [
       'Markets reacted with a risk-off tone and higher borrowing costs.',
       'Borrowers and investors are watching the next policy meeting closely.',
     ],
-    article: `The latest move by the central bank extends a careful balancing act between growth and price stability. Higher policy rates typically flow through to home loans, car loans, and business credit within weeks, which can slow spending but also help cool demand-driven inflation.
-
-For markets, the immediate read is straightforward: tighter money conditions reduce the appeal of stretched valuations, especially in rate-sensitive sectors such as real estate and consumer durables. At the same time, some investors see the hikes as evidence that policymakers are serious about protecting purchasing power over the long run.
-
-What happens next depends on incoming data—particularly jobs, credit growth, and global commodity prices. Until those signals clarify, expect headlines to swing between "pause" and "one more hike," with both narratives coexisting in the same week.`,
+    article: (
+      <>
+        <p className="text-[15px] leading-[1.85] text-slate-700 dark:text-slate-300">
+          The latest move by the central bank extends a careful balancing act between growth and price stability. Higher policy rates typically flow through to home loans, car loans, and business credit within weeks, which can slow spending but also help cool demand-driven{' '}
+          <JargonWord word="inflation" />.
+        </p>
+        <p className="mt-5 text-[15px] leading-[1.85] text-slate-700 dark:text-slate-300">
+          For markets, the immediate read is straightforward: tighter money conditions reduce the appeal of stretched <JargonWord word="valuations" />, especially in rate-sensitive sectors such as real estate and consumer durables. At the same time, some investors see the hikes as evidence that policymakers are serious about protecting <JargonWord word="purchasing power" /> over the long run.
+        </p>
+        <p className="mt-5 text-[15px] leading-[1.85] text-slate-700 dark:text-slate-300">
+          What happens next depends on incoming data—particularly jobs, credit growth, and global <JargonWord word="commodity" /> prices. Until those signals clarify, expect headlines to swing between &quot;pause&quot; and &quot;one more hike,&quot; with both narratives coexisting in the same week.
+        </p>
+      </>
+    ),
     question: { text: 'What do you think will happen next?', options: ['Market recovers', 'Market falls further', 'Sideways, little change'] },
     simulatedUpdate: {
       actualOutcome: 'Markets recovered: a softer inflation print sparked a relief rally and yields eased from their highs.',
@@ -136,11 +147,19 @@ For the tech sector, the stakes are significant. India is home to thousands of A
       'Wheat and cooking oil are the main drivers behind the increase.',
       'Poorer import-dependent nations face the sharpest economic pain.',
     ],
-    article: `Food inflation has a particular cruelty: it hits hardest the households that spend the largest share of income on eating. When global commodity benchmarks rise, the pain travels fastest to lower-income countries that rely on imports to feed growing urban populations.
-
-The current spike has two distinct drivers. Wheat markets remain sensitive to any disruption in the Black Sea corridor, where weather uncertainty and geopolitical tensions continue to unsettle trading. Meanwhile, edible oil supply chains have not fully recovered from successive weather shocks across major producing regions.
-
-For India—simultaneously a major agricultural producer and a net importer of certain commodities—the picture is mixed. Domestic rice and pulse output has held up, providing some buffer. But cooking oil imports remain expensive, and any pass-through to retail prices is politically sensitive ahead of state election cycles.`,
+    article: (
+      <>
+        <p className="text-[15px] leading-[1.85] text-slate-700 dark:text-slate-300">
+          <JargonWord word="Food inflation" lookup="food inflation" /> has a particular cruelty: it hits hardest the households that spend the largest share of income on eating. When global <JargonWord word="commodity" /> benchmarks rise, the pain travels fastest to lower-income countries that rely on imports to feed growing urban populations.
+        </p>
+        <p className="mt-5 text-[15px] leading-[1.85] text-slate-700 dark:text-slate-300">
+          The current spike has two distinct drivers. Wheat markets remain sensitive to any disruption in the <JargonWord word="Black Sea" lookup="black sea" /> corridor, where weather uncertainty and <JargonWord word="geopolitical" /> tensions continue to unsettle trading. Meanwhile, edible oil supply chains have not fully recovered from successive weather shocks across major producing regions.
+        </p>
+        <p className="mt-5 text-[15px] leading-[1.85] text-slate-700 dark:text-slate-300">
+          For India—simultaneously a major agricultural producer and a net importer of certain commodities—the picture is mixed. Domestic rice and pulse output has held up, providing some buffer. But cooking oil imports remain expensive, and any pass-through to retail prices is politically sensitive ahead of state election cycles.
+        </p>
+      </>
+    ),
     question: { text: 'What should governments prioritise?', options: ['Release strategic reserves', 'Negotiate trade deals fast', 'Subsidise retail prices'] },
     simulatedUpdate: {
       actualOutcome: 'Three G20 nations agreed to a coordinated reserve release; edible oil prices eased modestly within two weeks.',

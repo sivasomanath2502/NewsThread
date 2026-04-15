@@ -1,4 +1,4 @@
-import { stories as fallbackStories } from './stories.js'
+import { stories as fallbackStories } from './stories.jsx'
 
 const CACHE_PREFIX = 'nt_daily_news_v4'
 const DEFAULT_INTERESTS = ['Politics', 'Technology', 'Health', 'Science', 'Climate']
@@ -240,17 +240,21 @@ function getQuery(interests) {
     .join(' OR ')
 }
 
-export async function fetchDailyStories(interests = []) {
+export async function fetchDailyStories(interests = [], { bust = false } = {}) {
   const cacheKey = getTodayKey(interests)
-  const cached = localStorage.getItem(cacheKey)
 
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached)
-      if (Array.isArray(parsed) && parsed.length) return parsed
-    } catch {
-      localStorage.removeItem(cacheKey)
+  if (!bust) {
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length) return parsed
+      } catch {
+        localStorage.removeItem(cacheKey)
+      }
     }
+  } else {
+    localStorage.removeItem(cacheKey)
   }
 
   const params = new URLSearchParams({
@@ -259,6 +263,7 @@ export async function fetchDailyStories(interests = []) {
     sortBy: 'publishedAt',
     pageSize: '12',
   })
+  if (bust) params.set('bust', '1')
 
   const response = await fetch(`/api/news/everything?${params.toString()}`)
 

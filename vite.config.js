@@ -10,19 +10,17 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     server: {
       proxy: {
-        '/api/news': {
-          target: 'https://newsapi.org/v2',
+        // Proxy /api/article → Express server (fetches full article server-side, no CORS)
+        '/api/article': {
+          target: 'http://localhost:8787',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/news/, ''),
-          configure: (proxy) => {
-            proxy.on('proxyReq', (proxyReq, req) => {
-              const apiKey = env.VITE_NEWS_API_KEY
-              if (!apiKey) return
-              // NewsAPI supports passing the key via header; avoids URL rewriting edge-cases.
-              proxyReq.setHeader('X-Api-Key', apiKey)
-            })
-          },
         },
+        // Proxy /api/news → Express server (which caches + hides the API key)
+        '/api/news': {
+          target: 'http://localhost:8787',
+          changeOrigin: true,
+        },
+        // Proxy /api/ollama → local Ollama LLM (for AI recap)
         '/api/ollama': {
           target: 'http://127.0.0.1:11434',
           changeOrigin: true,
