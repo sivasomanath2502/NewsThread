@@ -332,25 +332,66 @@ function BreakingNewsBanner({articles,onOpen}){
   )
 }
 
-/* ─── Topic detection for cards ──────────────────────────────── */
+/* ─── Topic detection for cards (score-based, not first-match-wins) ── */
 const TOPIC_BUCKETS = [
-  { id:'politics', label:'Politics', emoji:'🏛️', rx:/\b(politics|government|minister|parliament|congress|bjp|modi|election|vote|party|opposition|senate|democrat|republican|trump|biden|rahul|gandhi|mla|mp|governor|legislation|diplomatic)\b/i },
-  { id:'sports', label:'Sports', emoji:'⚽', rx:/\b(cricket|ipl|football|soccer|tennis|match|player|team|championship|medal|olympic|world.?cup|tournament|wicket|runs|batting|goal|score|league|coach|f1|grand.?prix|hockey|kabaddi|athlete|sports)\b/i },
-  { id:'tech', label:'Tech', emoji:'💻', rx:/\b(ai|artificial.?intelligence|tech|software|app|startup|digital|cyber|robot|chip|semiconductor|algorithm|machine.?learn|automation|5g|quantum|data|cloud|google|apple|microsoft|meta|amazon|openai)\b/i },
-  { id:'business', label:'Business', emoji:'📈', rx:/\b(market|stock|shares|sensex|nifty|gdp|inflation|rbi|investment|profit|revenue|ipo|startup|company|corporate|trade|export|import|economy|growth|business|finance|bank|rupee|dollar|funding|valuation)\b/i },
-  { id:'health', label:'Health', emoji:'🏥', rx:/\b(health|medical|hospital|doctor|patient|disease|virus|vaccine|treatment|drug|cancer|surgery|mental|fitness|diet|wellness|WHO|ICMR|pharma|medicine|cure|symptom)\b/i },
-  { id:'entertainment', label:'Entertainment', emoji:'🎬', rx:/\b(movie|film|bollywood|hollywood|actor|actress|singer|music|album|series|streaming|netflix|disney|concert|celebrity|award|oscar|grammy|drama|show|entertainment|ott)\b/i },
-  { id:'science', label:'Science', emoji:'🔬', rx:/\b(science|research|study|discover|space|nasa|isro|satellite|climate|environment|species|fossil|physics|chemistry|biology|genome|molecule|experiment|telescope|planet|mars|moon)\b/i },
-  { id:'world', label:'World', emoji:'🌍', rx:/\b(international|global|united.?nations|nato|eu|china|russia|ukraine|us|america|europe|asia|middle.?east|africa|ceasefire|sanction|diplomatic|embassy|refugee|migration)\b/i },
-  { id:'education', label:'Education', emoji:'📚', rx:/\b(education|university|student|school|exam|college|teacher|admission|CBSE|NEET|JEE|UGC|scholarship|curriculum|campus|degree|syllabus)\b/i },
-  { id:'crime', label:'Crime', emoji:'🚨', rx:/\b(crime|arrest|police|murder|theft|robbery|scam|fraud|corruption|accused|suspect|court|verdict|sentence|jail|prison|investigation|probe|seized|smuggling)\b/i },
+  {
+    id:'crime', label:'Crime', emoji:'🚨',
+    terms:['arrest','arrested','murder','murdered','robbery','theft','scam','fraud','corruption','accused','suspect','verdict','sentenced','jail','jailed','prison','probe','seized','smuggling','criminal','bribery','extortion','trafficking','kidnap','assault','rape','narcotics','fir','chargesheet','bail','custody','fugitive','gangster','constable','convict','acquit','detained','cop','cops'],
+  },
+  {
+    id:'sports', label:'Sports', emoji:'⚽',
+    terms:['cricket','ipl','football','soccer','tennis','match','matches','championship','medal','olympics','olympic','world cup','tournament','wicket','batting','bowling','goal','goals','league','grand prix','formula 1','f1','hockey','kabaddi','badminton','squash','wrestling','athlete','athletes','sports','sprinter','striker','midfielder','goalkeeper','hat-trick','century','boundary','penalty','umpire','innings','bowler','batsman','batter','coach','squad','fixture','qualifier','semifinal','final','gold medal','silver medal','bronze'],
+  },
+  {
+    id:'entertainment', label:'Entertainment', emoji:'🎬',
+    terms:['movie','film','bollywood','hollywood','actor','actress','singer','album','streaming','netflix','disney','concert','celebrity','oscar','grammy','ott','box office','sequel','premiere','trailer','cast','director','producer','web series','reality show','bigg boss','standup','comedian','rap','hip hop','k-pop','anime','music video','chart','billboard','playlist','award show','red carpet','debut','cameo'],
+  },
+  {
+    id:'health', label:'Health', emoji:'🏥',
+    terms:['hospital','doctor','doctors','patient','patients','disease','virus','vaccine','vaccination','treatment','cancer','surgery','mental health','wellness','icmr','pharmaceutical','medicine','medicines','cure','symptom','symptoms','epidemic','pandemic','outbreak','diagnosis','chronic','diabetes','hypertension','stroke','cardiac','obesity','malnutrition','antibiotics','immunization','pathogen','icu','physician','surgeon','therapist','clinical trial','drug approval','health ministry'],
+  },
+  {
+    id:'tech', label:'Tech', emoji:'💻',
+    terms:['artificial intelligence','machine learning','deep learning','neural network','chatgpt','openai','gemini','generative ai','llm','cybersecurity','robotics','semiconductor','chip','algorithm','automation','5g','quantum computing','cloud computing','github','open source','saas','data breach','ransomware','malware','phishing','blockchain','cryptocurrency','bitcoin','ethereum','nft','gpu','nvidia','data center','broadband','iot','internet of things','smartphone','operating system','app store','google','apple','microsoft','meta','amazon','x corp','software engineer','developer','startup valuation','tech regulation','digital india'],
+  },
+  {
+    id:'business', label:'Business', emoji:'📈',
+    terms:['stock market','shares','sensex','nifty','gdp','inflation','rbi','repo rate','investment','profit','revenue','ipo','merger','acquisition','corporate','export','import','economy','economic','rupee','dollar','funding round','venture capital','private equity','fdi','forex','treasury','bond','mutual fund','equity','quarterly results','earnings','ceo','cfo','board','shareholder','dividend','buyback','sebi','credit rating','emi','trade deficit','fiscal','current account','commodity','crude oil','gold price','silver price'],
+  },
+  {
+    id:'science', label:'Science', emoji:'🔬',
+    terms:['scientists','research study','discovery','space mission','nasa','isro','satellite','rocket','orbit','mars','moon','asteroid','fossil','physics','chemistry','biology','genome','dna','rna','molecule','experiment','telescope','astronaut','observatory','quantum physics','particle','neutron','proton','enzyme','protein','mutation','evolution','extinction','biodiversity','atmosphere','ozone','black hole','supernova','galaxy','exoplanet','crispr','stem cell','archaeological','geologist','oceanography','neuroscience','climate science'],
+  },
+  {
+    id:'education', label:'Education', emoji:'📚',
+    terms:['university','students','school','exam','college','admission','cbse','icse','neet','jee','ugc','scholarship','curriculum','campus','degree','syllabus','board exam','semester','faculty','coaching','dropout','enrollment','literacy','edtech','upsc','civil services','ias','ips','result','marks','academic','education ministry','school dropout','higher education','vocational'],
+  },
+  {
+    id:'world', label:'World', emoji:'🌍',
+    terms:['united nations','nato','european union','china','russia','ukraine','middle east','israel','palestine','gaza','iran','iraq','syria','afghanistan','myanmar','taiwan','north korea','ceasefire','sanction','sanctions','war','conflict','refugee','migration','migrant','humanitarian','bilateral','multilateral','summit','coup','revolution','geopolitical','diplomatic relations','foreign minister','g20','g7','imf','world bank'],
+  },
+  {
+    id:'politics', label:'Politics', emoji:'🏛️',
+    terms:['parliament','prime minister','president','election','elections','vote','ballot','campaign','candidate','bjp','congress party','aap','tmc','modi','kejriwal','rahul gandhi','chief minister','cabinet','manifesto','legislation','bill passed','loksabha','rajyasabha','vidhan sabha','governor','mla','mp','opposition','ruling party','government policy','constitution','supreme court ruling','high court','judiciary','budget','fiscal policy','taxation','subsidy','political party','bypolls','assembly election'],
+  },
 ]
 
 function detectTopic(text) {
+  if (!text) return { label: 'General', emoji: '📰' }
+  // Title gets 3× weight, description 1×
+  const titlePart = (text.slice(0, text.indexOf('\n') > 0 ? text.indexOf('\n') : 120) || '').toLowerCase()
+  const fullLower = text.toLowerCase()
+
+  let best = null, bestScore = 0
   for (const b of TOPIC_BUCKETS) {
-    if (b.rx.test(text)) return { label: b.label, emoji: b.emoji }
+    let score = 0
+    for (const t of b.terms) {
+      if (titlePart.includes(t)) score += 3
+      else if (fullLower.includes(t)) score += 1
+    }
+    if (score > bestScore) { bestScore = score; best = b }
   }
-  return { label: 'General', emoji: '📰' }
+  return bestScore >= 1 ? { label: best.label, emoji: best.emoji } : { label: 'General', emoji: '📰' }
 }
 
 /* ─── Trending bar — specific keywords/entities ──────────────── */
@@ -535,7 +576,13 @@ function NewsFeed({articles,loading,error,searchQuery,onOpen,newsBookmarks,onTog
         <div className="rounded-2xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 px-4 py-3 text-sm text-rose-800 dark:text-rose-200 mb-6">
           <p className="font-bold">Could not load headlines</p>
           <p className="mt-1 text-rose-700/90 dark:text-rose-300/90">{error}</p>
-          <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">Add <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">NEWS_API_KEY</code> to <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">.env</code> and restart <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">npm run dev</code>.</p>
+          {/rate.?limit|too many req|429/i.test(error) ? (
+            <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">⏳ NewsAPI free-tier limit hit (100 req/day). Wait a few hours and refresh, or upgrade at <a href="https://newsapi.org/pricing" target="_blank" rel="noreferrer" className="underline font-semibold">newsapi.org/pricing</a>.</p>
+          ) : /missing.*key|NEWS_API_KEY|api.?key/i.test(error) ? (
+            <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">Add <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">NEWS_API_KEY</code> to <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">.env</code> and restart <code className="rounded bg-rose-100 dark:bg-rose-900/60 px-1">npm run dev</code>.</p>
+          ) : (
+            <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">Check the server console for details, then click <strong>Refresh news</strong> to retry.</p>
+          )}
         </div>
       )}
 
@@ -699,6 +746,8 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
   const[annotatingIndex,setAnnotatingIndex]=useState(null)
   const[annotationDraft,setAnnotationDraft]=useState('')
   const[selectedOption,setSelectedOption]=useState(null)
+  const[userPrediction,setUserPrediction]=useState('')
+  const[engagementMode,setEngagementMode]=useState('quick')
   const[submitted,setSubmitted]=useState(false)
   const[progress,setProgress]=useState(0)
   const[copied,setCopied]=useState(false)
@@ -747,8 +796,21 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
   const currentSimulated = showSimulatedUpdate[String(story.id)] || false
 
   useEffect(()=>{
-    if(currentAnswer){setSelectedOption(currentAnswer.optionIndex);setSubmitted(true)}
-    else{setSelectedOption(null);setSubmitted(false)}
+    if(currentAnswer){
+      if(currentAnswer.optionIndex !== null) {
+        setSelectedOption(currentAnswer.optionIndex)
+        setEngagementMode('quick')
+      } else {
+        setUserPrediction(currentAnswer.optionLabel)
+        setEngagementMode('custom')
+      }
+      setSubmitted(true)
+    } else {
+      setSelectedOption(null)
+      setUserPrediction('')
+      setEngagementMode('quick')
+      setSubmitted(false)
+    }
   },[story.id,currentAnswer])
   useEffect(()=>{
     const fn=()=>{const el=document.documentElement;const total=el.scrollHeight-el.clientHeight;setProgress(total>0?Math.round((el.scrollTop/total)*100):0)}
@@ -788,7 +850,15 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
     return()=>{cancelled=true}
   },[story.id,relatedTimeline,story.timeline])
 
-  const handleSubmit=e=>{e.preventDefault();if(selectedOption===null)return;onSaveAnswer(story.id,selectedOption,story.question.options[selectedOption]);setSubmitted(true)}
+  const handleSubmit=e=>{
+    e.preventDefault();
+    if(engagementMode==='quick'&&selectedOption!==null){
+      onSaveAnswer(story.id,selectedOption,story.question.options[selectedOption]);
+    }else if(engagementMode==='custom'&&userPrediction.trim()){
+      onSaveAnswer(story.id,null,userPrediction.trim());
+    }else return;
+    setSubmitted(true);
+  }
   const handleShare=()=>{const t=`${story.title} — NewsThread`;if(navigator.share)navigator.share({title:story.title,text:t}).catch(()=>{});else navigator.clipboard.writeText(t).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000)})}
 
   const saveAnnotation=(eventIndex)=>{
@@ -851,7 +921,7 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
     return()=>{cancelled=true}
   },[story?.id])
 
-  const predictedLabel=currentAnswer?.optionLabel??(selectedOption!==null?story.question.options[selectedOption]:null)
+  const predictedLabel=currentAnswer?.optionLabel??(submitted?(engagementMode==='quick'?story.question.options[selectedOption]:userPrediction):null)
   const st=cs(story.category)
 
   // Determine article content — could be JSX (from stories.jsx) or string (from newsApi)
@@ -1065,11 +1135,25 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
               </div>
             ) : (
               <>
-                {rawArticleStr.split('\n\n').filter(Boolean).map((para,i)=>(
-                  <p key={i} className="text-[15px] leading-relaxed text-slate-800 dark:text-slate-200">
-                    <JargonParagraph text={para}/>
-                  </p>
-                ))}
+                <div className="relative pl-6 border-l-2 border-slate-100 dark:border-slate-800 space-y-8 mt-2 mb-6">
+                  {rawArticleStr.split('\n\n').filter(Boolean).map((para,i)=>(
+                    <div key={i} className="relative">
+                      {/* Node marker connecting the story elements */}
+                      <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-white dark:bg-slate-900 border-[3px] border-blue-400 z-10 shadow-sm" />
+                      
+                      {i === 0 ? (
+                        <p className="text-[16px] font-medium leading-relaxed text-slate-900 dark:text-white pb-3">
+                          <span className="float-left text-5xl font-black text-blue-500 mr-2 mt-[-4px] leading-none" style={{fontFamily:'Georgia,serif'}}>{para[0]}</span>
+                          <JargonParagraph text={para.slice(1)}/>
+                        </p>
+                      ) : (
+                        <p className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-800/60 transition-colors hover:border-blue-200 dark:hover:border-blue-800">
+                          <JargonParagraph text={para}/>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 {articleFetchErr&&!articleFull&&(
                   <div className="mt-3 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
                     <p className="font-semibold">Couldn't load the full article automatically</p>
@@ -1115,25 +1199,32 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
             <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20 p-5 mb-4 space-y-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">💡 Context & Insights</p>
 
-              {/* Why it matters */}
-              <div className="rounded-2xl border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 px-4 py-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-500 mb-1">Why this matters</p>
-                <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{insights.whyMatters}</p>
+              {/* Why it matters & Tone */}
+              <div className="rounded-2xl border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 overflow-hidden">
+                <div className="flex items-center justify-between border-b border-indigo-50 dark:border-indigo-900/50 px-4 py-3 bg-indigo-50/30 dark:bg-slate-800/20">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Why this matters</p>
+                  {insights.tone && (
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold text-${insights.tone.color}-700 dark:text-${insights.tone.color}-400 bg-${insights.tone.color}-100 dark:bg-${insights.tone.color}-900/30`}>
+                      {insights.tone.label} Tone
+                    </span>
+                  )}
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-[14px] leading-relaxed text-slate-700 dark:text-slate-300">{insights.whyMatters}</p>
+                </div>
               </div>
 
-              {/* Key facts extracted from the article */}
-              {insights.keyFacts.length>0&&(
+              {/* Key Entities */}
+              {insights.entities && insights.entities.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-500">📌 Key numbers</p>
-                  {insights.keyFacts.map((fact,i)=>(
-                    <div key={i} className="rounded-2xl border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 px-4 py-2.5 flex items-start gap-3">
-                      <span className="shrink-0 mt-0.5 w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold flex items-center justify-center">{fact.type==='percentage'?'%':fact.type==='amount'?'₹':'#'}</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{fact.value}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mt-0.5">{fact.context}</p>
-                      </div>
-                    </div>
-                  ))}
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-500">🏷️ Key Players / Topics</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {insights.entities.map((entity, i) => (
+                      <span key={i} className="inline-flex items-center rounded-xl bg-indigo-100 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 px-3 py-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                        {entity}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1161,18 +1252,52 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
           )}
 
           {/* ── Engage Question ── */}
-          <div className="rounded-3xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 p-5">
-            {currentAnswer&&<div className="mb-4 rounded-2xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 px-4 py-3 text-sm text-violet-900 dark:text-violet-300"><span className="font-bold">Your answer:</span>{' '}{String.fromCharCode(65+currentAnswer.optionIndex)}. {currentAnswer.optionLabel}</div>}
-            <p className="text-base font-bold text-slate-900 dark:text-white leading-snug" style={{fontFamily:'Georgia,serif'}}>{story.question.text}</p>
-            <form onSubmit={handleSubmit} className="mt-4 space-y-2.5">
-              {story.question.options.map((opt,i)=>{const checked=selectedOption===i;return(
-                <label key={i} className={`flex items-center gap-3.5 rounded-2xl border-2 px-4 py-3 cursor-pointer transition-all ${checked?'border-violet-500 bg-violet-50 dark:bg-violet-900/40 shadow-sm':'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-violet-300 dark:hover:border-violet-700'}`}>
-                  <input type="radio" name={`q-${story.id}`} className="accent-violet-600 w-4 h-4 shrink-0" checked={checked} onChange={()=>{setSelectedOption(i);setSubmitted(false)}}/>
-                  <span className="text-sm text-slate-800 dark:text-slate-200"><span className="font-bold text-violet-600 dark:text-violet-400">{String.fromCharCode(65+i)}.</span>{' '}{opt}</span>
-                </label>
-              )})}
-              <button type="submit" disabled={selectedOption===null||submitted} className="mt-2 w-full rounded-2xl bg-violet-600 py-3.5 text-sm font-bold text-white hover:bg-violet-700 transition disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed active:scale-[0.99]">{submitted?'Prediction saved ✓':'Submit prediction'}</button>
-            </form>
+          <div className="rounded-3xl border border-violet-200 dark:border-violet-900/50 bg-gradient-to-br from-violet-50 to-fuchsia-50 dark:from-violet-950/40 dark:to-fuchsia-950/20 p-6 shadow-sm overflow-hidden relative">
+            {currentAnswer ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"/><span className="text-[11px] font-bold uppercase tracking-widest text-violet-500 dark:text-violet-400">Response captured</span></div>
+                <div className="rounded-2xl border border-violet-200 dark:border-violet-800 bg-white/60 dark:bg-violet-900/30 px-5 py-4 text-sm text-violet-900 dark:text-violet-200 shadow-inner break-words">
+                  <span className="font-bold block mb-1">You responded:</span>
+                  <p className="text-[15px] italic">"{currentAnswer.optionLabel}"</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-lg font-bold text-slate-900 dark:text-white leading-relaxed mb-5" style={{fontFamily:'Georgia,serif'}}>{story.question.text}</p>
+                
+                {/* Visual Tab Switcher */}
+                <div className="flex bg-white/50 dark:bg-slate-950/50 rounded-xl p-1 mb-5 border border-violet-100 dark:border-violet-900">
+                  <button type="button" onClick={() => setEngagementMode('quick')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${engagementMode === 'quick' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-700 dark:text-violet-300 transform scale-[1.02]' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>⚡ Quick Take</button>
+                  <button type="button" onClick={() => setEngagementMode('custom')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${engagementMode === 'custom' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-700 dark:text-violet-300 transform scale-[1.02]' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>✍️ Custom Perspective</button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4 duration-300 animate-in fade-in slide-in-from-bottom-2">
+                  {engagementMode === 'quick' ? (
+                    <div className="space-y-2.5">
+                      {story.question.options.map((opt, i) => {
+                        const checked = selectedOption === i;
+                        return (
+                          <label key={i} className={`flex items-start gap-3.5 rounded-2xl border-2 px-4 py-3.5 cursor-pointer transition-all duration-200 ${checked ? 'border-violet-500 bg-white dark:bg-violet-900/40 transform scale-[1.01] shadow-md' : 'border-violet-200/60 dark:border-violet-900/40 bg-white/50 dark:bg-slate-900/50 hover:border-violet-300 hover:bg-white dark:hover:border-violet-700'}`}>
+                            <input type="radio" name={`q-${story.id}`} className="accent-violet-600 w-4 h-4 shrink-0 mt-0.5" checked={checked} onChange={() => {setSelectedOption(i); setSubmitted(false)}}/>
+                            <span className="text-[14px] font-medium leading-tight text-slate-800 dark:text-slate-200">{opt}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <textarea
+                      value={userPrediction}
+                      onChange={e => setUserPrediction(e.target.value)}
+                      rows={3}
+                      placeholder="Share your perspective, predictions, or thoughts..."
+                      className="w-full rounded-2xl border-2 border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900 p-4 text-[14px] leading-relaxed text-slate-800 dark:text-slate-200 placeholder:text-slate-400 resize-none outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all shadow-inner"
+                    />
+                  )}
+
+                  <button type="submit" disabled={(engagementMode === 'quick' && selectedOption === null) || (engagementMode === 'custom' && !userPrediction.trim()) || submitted} className="mt-2 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-[15px] font-bold text-white hover:opacity-90 hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:hover:shadow-none disabled:cursor-not-allowed active:scale-[0.98]">{submitted ? 'Saved ✓' : 'Submit response'}</button>
+                </form>
+              </>
+            )}
           </div>
         </section>
 
@@ -1185,10 +1310,15 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
               <h3 className="mt-3 font-bold text-slate-900 dark:text-white" style={{fontFamily:'Georgia,serif'}}>What actually happened</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{story.simulatedUpdate.actualOutcome}</p>
               {predictedLabel&&(
-                <div className="mt-4 rounded-2xl border border-sky-200 dark:border-sky-800 bg-white dark:bg-slate-900 p-4 space-y-2 text-sm">
-                  <div className="flex items-start gap-2"><span className="font-semibold text-slate-500 dark:text-slate-400 shrink-0 w-28">You predicted:</span><span className="text-slate-800 dark:text-slate-200">{predictedLabel}</span></div>
-                  <div className="flex items-start gap-2"><span className="font-semibold text-slate-500 dark:text-slate-400 shrink-0 w-28">Actual outcome:</span><span className="text-slate-800 dark:text-slate-200">{story.simulatedUpdate.outcomeSummary}</span></div>
-                  <span className={`inline-flex mt-1 rounded-full px-3 py-1 text-[11px] font-bold ${predictedLabel===story.simulatedUpdate.outcomeSummary?'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400':'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>{predictedLabel===story.simulatedUpdate.outcomeSummary?'🎯 Correct!':'Outcome was different'}</span>
+                <div className="mt-4 rounded-2xl border border-sky-200 dark:border-sky-800 bg-white dark:bg-slate-900 p-4 space-y-3 text-sm">
+                  <div>
+                    <span className="font-semibold text-sky-600 dark:text-sky-400 block mb-1">You predicted:</span>
+                    <span className="text-slate-800 dark:text-slate-200 italic">"{predictedLabel}"</span>
+                  </div>
+                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 block mb-1">Actual outcome:</span>
+                    <span className="text-slate-800 dark:text-slate-200">{story.simulatedUpdate.outcomeSummary}</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1227,20 +1357,18 @@ function PredictionsScreen({stories,userAnswers,simulatedByStory,onOpenStory,onB
         {answered.map(s=>{
           const ans=userAnswers[String(s.id)]
           const revealed=simulatedByStory[String(s.id)]
-          const correct=revealed&&ans.optionLabel===s.simulatedUpdate?.outcomeSummary
           return(
             <button key={s.id} onClick={()=>onOpenStory(s.id)} className="w-full text-left rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-700 transition-all">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">{s.category}</p>
                   <p className="font-bold text-slate-900 dark:text-white text-[15px] leading-snug" style={{fontFamily:'Georgia,serif'}}>{s.title}</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Your prediction: <span className="font-semibold text-violet-600 dark:text-violet-400">{ans.optionLabel}</span></p>
-                  {revealed&&<p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Actual: <span className="font-semibold text-slate-700 dark:text-slate-300">{s.simulatedUpdate?.outcomeSummary}</span></p>}
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-3 italic">"{ans.optionLabel}"</p>
+                  {revealed&&<div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800"><p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 mb-0.5">Outcome:</p><p className="text-sm text-slate-700 dark:text-slate-300">{s.simulatedUpdate?.outcomeSummary}</p></div>}
                 </div>
                 <div className="shrink-0 mt-1">
-                  {!revealed&&<span className="rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-3 py-1 text-[11px] font-bold">Pending</span>}
-                  {revealed&&correct&&<span className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-3 py-1 text-[11px] font-bold">🎯 Correct</span>}
-                  {revealed&&!correct&&<span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-3 py-1 text-[11px] font-bold">Incorrect</span>}
+                  {!revealed&&<span className="rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 px-3 py-1 text-[11px] font-bold">Waiting</span>}
+                  {revealed&&<span className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-3 py-1 text-[11px] font-bold">Updated</span>}
                 </div>
               </div>
             </button>
@@ -1338,9 +1466,11 @@ function ProfilePanel({onClose,followedIds,readingHistory,interests,allFeedback,
                 day.count>=1?'bg-orange-200 dark:bg-orange-900/50 text-orange-700 dark:text-orange-400':
                 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
               } ${day.isToday?'ring-2 ring-orange-400 ring-offset-1 ring-offset-white dark:ring-offset-slate-950':''}`}>
-                {day.count||'·'}
+                {day.date}
               </div>
-              <p className="text-[8px] text-slate-300 dark:text-slate-600 mt-0.5">{day.date}</p>
+              <p className={`text-[9px] font-bold mt-0.5 ${day.count>0?'text-orange-500 dark:text-orange-400':'text-transparent'}`}>
+                {day.count>0?`${day.count}✓`:'·'}
+              </p>
             </div>
           ))}
         </div>
