@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { fallbackStories, fetchDailyStories, fetchRelatedTimeline } from './newsApi.js'
 import { summarizeTimelineWithLocalModel } from './localRecap.js'
+import { generateSmartQuestion, generateInsights } from './smartEngage.js'
 import JargonText from './JargonText.jsx'
 import { JargonWord } from './JargonWord.jsx'
 import { JARGON_GLOSSARY } from './glossary.js'
 import { stories as protoStories } from './stories.jsx'
+
 
 /* ─── Common-words filter for inline jargon detection ────────── */
 const COMMON_WORDS = new Set([
@@ -210,7 +212,7 @@ function Navbar({onGoHome,onToggleProfile,onToggleHistory,profileOpen,historyOpe
         ):(
           <>
             <button onClick={onGoHome} className="shrink-0 text-[17px] font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition" style={{fontFamily:'Georgia,serif',fontStyle:'italic'}}>NewsThread</button>
-            {streak>1&&<span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 px-2 py-0.5 text-[11px] font-bold text-orange-600 dark:text-orange-400">🔥 {streak}d</span>}
+            {streak>=1&&<span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 px-2 py-0.5 text-[11px] font-bold text-orange-600 dark:text-orange-400">🔥 {streak} day{streak!==1?'s':''}</span>}
             <div className="flex-1"/>
             <div className="flex items-center gap-0.5">
               <button onClick={openSearch} title="Search" className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition">
@@ -251,26 +253,199 @@ function CategoryBar({categories,active,onChange}){
   )
 }
 
+/* ─── Sentiment analysis (client-side heuristic) ─────────────── */
+const POSITIVE_WORDS = new Set([
+  'growth','surge','record','success','win','wins','won','breakthrough','improve','improves','improved',
+  'boost','boosts','rise','rises','rising','gain','gains','profit','profits','launch','launches','launched',
+  'milestone','historic','recovery','recover','strong','stronger','strongest','best','achieve','achieved',
+  'innovation','celebrate','celebrates','positive','hope','hopes','hopeful','progress','reform','reforms',
+  'upgrade','award','awards','awarded','deal','partnership','expand','expands','expansion','soar','soars',
+  'rally','rallies','approve','approved','support','supports','celebrate','victory','lead','leads',
+  'develop','develops','inaugurate','inaugurated','invest','invests','empower','empowers','thrive',
+  'shine','shines','excel','excels','resolve','resolves','safe','safer','safest','peace','peaceful',
+  'benefit','benefits','opportunity','opportunities','optimistic','optimism','encourage','encouraged',
+  'relief','proud','proudly','hero','heroic','rescue','saved','cure','cured','innovation','solve','solved'
+])
+const NEGATIVE_WORDS = new Set([
+  'crisis','crash','crashes','fall','falls','falling','drop','drops','decline','declines','declining',
+  'death','deaths','dead','kill','kills','killed','attack','attacks','attacked','fraud','scam','scams',
+  'scandal','scandals','collapse','collapses','collapsed','war','wars','conflict','conflicts',
+  'disaster','disasters','emergency','threat','threatens','threatened','risk','risks','risky',
+  'loss','losses','shortage','shortages','protest','protests','strike','strikes','ban','bans','banned',
+  'arrest','arrests','arrested','violence','violent','fail','fails','failed','failure','worst',
+  'fear','fears','concern','concerns','alarm','alarming','danger','dangerous','tension','tensions',
+  'recession','layoff','layoffs','slash','slashes','slump','slumps','plunge','plunges','deny','denies',
+  'reject','rejects','rejected','oppose','opposes','opposed','outrage','fury','angry','anger','rage',
+  'corrupt','corruption','exploit','exploited','abuse','abused','flee','flees','fled','victim','victims',
+  'devastating','devastation','suffer','suffers','suffered','struggling','struggle','catastrophe','chaos',
+  'damage','damages','damaged','penalty','penalize','punishment','punish','warning','warn','warns','toxic'
+])
+
+function analyzeSentiment(text) {
+  const words = (text||'').toLowerCase().split(/\W+/)
+  let pos = 0, neg = 0
+  for (const w of words) {
+    if (POSITIVE_WORDS.has(w)) pos++
+    if (NEGATIVE_WORDS.has(w)) neg++
+  }
+  if (pos > 0 && pos > neg) return { label: 'Positive', color: 'emerald', emoji: '🟢' }
+  if (neg > 0 && neg > pos) return { label: 'Negative', color: 'rose', emoji: '🔴' }
+  return { label: 'Neutral', color: 'slate', emoji: '🟡' }
+}
+
+function estimateReadTime(text) {
+  const words = (text||'').split(/\s+/).filter(Boolean).length
+  const mins = Math.max(1, Math.round(words / 200))
+  return `${mins} min read`
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return new Date(dateStr).toLocaleDateString(undefined,{dateStyle:'medium'})
+}
+
+/* ─── Breaking News Banner ───────────────────────────────────── */
+function BreakingNewsBanner({articles,onOpen}){
+  const breakingArticle = useMemo(()=>{
+    const oneHourAgo = Date.now() - 60*60*1000
+    return articles.find(a => a.publishedAt && new Date(a.publishedAt).getTime() > oneHourAgo)
+  },[articles])
+  const[dismissed,setDismissed]=useState(false)
+  if(!breakingArticle||dismissed) return null
+  return(
+    <div className="breaking-slide-in mb-4 rounded-2xl overflow-hidden border border-red-200 dark:border-red-900 bg-gradient-to-r from-red-50 via-orange-50 to-amber-50 dark:from-red-950/40 dark:via-orange-950/30 dark:to-amber-950/20">
+      <div className="px-4 py-3 flex items-center gap-3">
+        <span className="breaking-pulse shrink-0 rounded-full bg-red-500 text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-1">Breaking</span>
+        <button type="button" onClick={()=>onOpen(breakingArticle)} className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{breakingArticle.title}</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{timeAgo(breakingArticle.publishedAt)} · {breakingArticle.source}</p>
+        </button>
+        <button onClick={()=>setDismissed(true)} className="shrink-0 text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Topic detection for cards ──────────────────────────────── */
+const TOPIC_BUCKETS = [
+  { id:'politics', label:'Politics', emoji:'🏛️', rx:/\b(politics|government|minister|parliament|congress|bjp|modi|election|vote|party|opposition|senate|democrat|republican|trump|biden|rahul|gandhi|mla|mp|governor|legislation|diplomatic)\b/i },
+  { id:'sports', label:'Sports', emoji:'⚽', rx:/\b(cricket|ipl|football|soccer|tennis|match|player|team|championship|medal|olympic|world.?cup|tournament|wicket|runs|batting|goal|score|league|coach|f1|grand.?prix|hockey|kabaddi|athlete|sports)\b/i },
+  { id:'tech', label:'Tech', emoji:'💻', rx:/\b(ai|artificial.?intelligence|tech|software|app|startup|digital|cyber|robot|chip|semiconductor|algorithm|machine.?learn|automation|5g|quantum|data|cloud|google|apple|microsoft|meta|amazon|openai)\b/i },
+  { id:'business', label:'Business', emoji:'📈', rx:/\b(market|stock|shares|sensex|nifty|gdp|inflation|rbi|investment|profit|revenue|ipo|startup|company|corporate|trade|export|import|economy|growth|business|finance|bank|rupee|dollar|funding|valuation)\b/i },
+  { id:'health', label:'Health', emoji:'🏥', rx:/\b(health|medical|hospital|doctor|patient|disease|virus|vaccine|treatment|drug|cancer|surgery|mental|fitness|diet|wellness|WHO|ICMR|pharma|medicine|cure|symptom)\b/i },
+  { id:'entertainment', label:'Entertainment', emoji:'🎬', rx:/\b(movie|film|bollywood|hollywood|actor|actress|singer|music|album|series|streaming|netflix|disney|concert|celebrity|award|oscar|grammy|drama|show|entertainment|ott)\b/i },
+  { id:'science', label:'Science', emoji:'🔬', rx:/\b(science|research|study|discover|space|nasa|isro|satellite|climate|environment|species|fossil|physics|chemistry|biology|genome|molecule|experiment|telescope|planet|mars|moon)\b/i },
+  { id:'world', label:'World', emoji:'🌍', rx:/\b(international|global|united.?nations|nato|eu|china|russia|ukraine|us|america|europe|asia|middle.?east|africa|ceasefire|sanction|diplomatic|embassy|refugee|migration)\b/i },
+  { id:'education', label:'Education', emoji:'📚', rx:/\b(education|university|student|school|exam|college|teacher|admission|CBSE|NEET|JEE|UGC|scholarship|curriculum|campus|degree|syllabus)\b/i },
+  { id:'crime', label:'Crime', emoji:'🚨', rx:/\b(crime|arrest|police|murder|theft|robbery|scam|fraud|corruption|accused|suspect|court|verdict|sentence|jail|prison|investigation|probe|seized|smuggling)\b/i },
+]
+
+function detectTopic(text) {
+  for (const b of TOPIC_BUCKETS) {
+    if (b.rx.test(text)) return { label: b.label, emoji: b.emoji }
+  }
+  return { label: 'General', emoji: '📰' }
+}
+
+/* ─── Trending bar — specific keywords/entities ──────────────── */
+const TRENDING_STOP = new Set(['the','a','an','and','or','to','of','in','on','for','with','as','at','by','from','is','are','was','were','has','have','had','will','be','been','not','but','its','it','this','that','said','says','new','after','over','how','what','all','more','can','could','would','should','about','also','just','like','than','into','their','they','them','your','you','which','when','where','there','here','then','very','most','some','make','made','much','many','being','such','want','look','back','only','come','take','even','give','know','need','find','tell','help','keep','think','turn','work','show','seem','first','time','year','years','news','report','read','blog','post','follow','share','says','going','still','these','those','other','each','every','last','next','well','while','before','under','really','because','during','between','without','though','through','india','world','may','why','gets','got'])
+
+function TrendingTopics({articles,onSearch}){
+  const keywords = useMemo(()=>{
+    const counts = {}
+    for (const a of articles) {
+      // Extract capitalized words/names from titles (proper nouns)
+      const title = a.title || ''
+      const caps = title.match(/\b[A-Z][a-zA-Z]{2,}\b/g) || []
+      const seen = new Set()
+      for (const w of caps) {
+        const low = w.toLowerCase()
+        if (TRENDING_STOP.has(low) || seen.has(low)) continue
+        seen.add(low)
+        counts[w] = (counts[w]||0) + 1
+      }
+    }
+    return Object.entries(counts)
+      .filter(([,c])=>c>=2)
+      .sort((a,b)=>b[1]-a[1])
+      .slice(0,10)
+      .map(([word,count],i)=>({word,count,hot:i<3}))
+  },[articles])
+
+  if(!keywords.length) return null
+  return(
+    <div className="mb-4">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2 flex items-center gap-1.5"><span>🔥</span> Trending now</p>
+      <div className="flex gap-2 overflow-x-auto pb-1 trending-scroll [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {keywords.map(t=>(
+          <button key={t.word} onClick={()=>onSearch(t.word)} className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition border ${t.hot?'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-400':'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-300 bg-white dark:bg-slate-900'}`}>
+            {t.hot&&<span className="mr-1">🔥</span>}{t.word}
+            <span className="ml-1.5 text-[10px] opacity-50">{t.count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ─── Live news card (from prototype) ────────────────────────── */
+const SENTIMENT_STYLES = {
+  emerald: { badge: 'border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' },
+  rose:    { badge: 'border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400', dot: 'bg-rose-500' },
+  slate:   { badge: 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400', dot: 'bg-slate-400' },
+}
+
 function NewsCard({article,onOpen,isBookmarked,onToggleBookmark}){
   const[imgOk,setImgOk]=useState(true)
   const hasImg=article.urlToImage&&imgOk
+  const sentiment = useMemo(()=>analyzeSentiment(`${article.title} ${article.description}`),[article.title])
+  const topic = useMemo(()=>detectTopic(`${article.title} ${article.description}`),[article.title])
+  const readTime = useMemo(()=>estimateReadTime(`${article.title} ${article.description}`),[article.title])
+  const ago = useMemo(()=>timeAgo(article.publishedAt),[article.publishedAt])
+  const ss = SENTIMENT_STYLES[sentiment.color] || SENTIMENT_STYLES.slate
+
+  const sentimentBadge = (
+    <div className={`absolute top-2.5 left-2.5 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold backdrop-blur-md bg-white/80 dark:bg-slate-900/80 border ${ss.badge}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${ss.dot} sentiment-dot`}/>{sentiment.label}
+    </div>
+  )
+
   return(
     <div className="relative group">
-      <button type="button" onClick={()=>onOpen(article)} className="w-full text-left rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-700 transition-all duration-200 overflow-hidden active:scale-[0.99]">
+      <button type="button" onClick={()=>onOpen(article)} className="w-full text-left rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm card-glow hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-700 transition-all duration-200 overflow-hidden active:scale-[0.99]">
         {hasImg?(
-          <div className="aspect-[16/10] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+          <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
             <img src={article.urlToImage} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" onError={()=>setImgOk(false)}/>
+            {sentimentBadge}
           </div>
         ):(
-          <div className="aspect-[16/10] w-full bg-gradient-to-br from-slate-100 via-indigo-50 to-violet-100 dark:from-slate-800 dark:via-indigo-950 dark:to-slate-900 flex items-center justify-center text-4xl">📰</div>
+          <div className="relative aspect-[16/10] w-full bg-gradient-to-br from-slate-100 via-indigo-50 to-violet-100 dark:from-slate-800 dark:via-indigo-950 dark:to-slate-900 flex items-center justify-center text-4xl">
+            📰
+            {sentimentBadge}
+          </div>
         )}
         <div className="p-4 sm:p-5">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-indigo-500 dark:text-indigo-400 mb-1.5 truncate">{article.source||'News'}</p>
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400 shrink-0">
+              {topic.emoji} {topic.label}
+            </span>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-indigo-500 dark:text-indigo-400 truncate">{article.source||'News'}</p>
+            <span className="text-[10px] text-slate-300 dark:text-slate-600">·</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 shrink-0">
+              <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              {readTime}
+            </span>
+          </div>
           <h2 className="text-[16px] sm:text-[17px] font-bold leading-snug text-slate-900 dark:text-white line-clamp-3 pr-6" style={{fontFamily:'Georgia,serif'}}>{article.title}</h2>
           {article.description&&<p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2">{article.description}</p>}
           <div className="mt-4 flex items-center justify-between gap-2">
-            <time className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">{article.publishedAt?new Date(article.publishedAt).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}):''}</time>
+            <time className="text-[11px] text-slate-400 dark:text-slate-500 shrink-0">{ago}</time>
             <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 group-hover:gap-2 transition-all">Open <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M2 6h8M7 3l3 3-3 3"/></svg></span>
           </div>
         </div>
@@ -301,14 +476,14 @@ function NewsCategoryBar({active,onChange}){
 }
 
 /* ─── Live news feed (from prototype) ────────────────────────── */
-function NewsFeed({articles,loading,error,searchQuery,onOpen,newsBookmarks,onToggleBookmark,activeTab,onTabChange,newsCategory,onNewsCategory,onRefresh,refreshing}){
+function NewsFeed({articles,loading,error,searchQuery,onOpen,newsBookmarks,onToggleBookmark,activeTab,onTabChange,newsCategory,onNewsCategory,onRefresh,refreshing,onSearchQuery}){
   const matchSearch=a=>{
     const q=searchQuery.trim().toLowerCase()
     if(!q)return true
     return`${a.title} ${a.description} ${a.source}`.toLowerCase().includes(q)
   }
-  const fromFeed=articles.filter(matchSearch)
-  const fromSaved=newsBookmarks.filter(matchSearch)
+  const fromFeed=[...articles.filter(matchSearch)].sort((a,b)=>new Date(b.publishedAt||0)-new Date(a.publishedAt||0))
+  const fromSaved=[...newsBookmarks.filter(matchSearch)].sort((a,b)=>new Date(b.publishedAt||0)-new Date(a.publishedAt||0))
   const list=activeTab==='bookmarks'?fromSaved:fromFeed
 
   return(
@@ -326,6 +501,14 @@ function NewsFeed({articles,loading,error,searchQuery,onOpen,newsBookmarks,onTog
         </header>
       )}
 
+      {/* Breaking news + Trending keywords */}
+      {!searchQuery&&activeTab==='feed'&&articles.length>0&&(
+        <>
+          <BreakingNewsBanner articles={articles} onOpen={onOpen}/>
+          <TrendingTopics articles={articles} onSearch={(w)=>onSearchQuery&&onSearchQuery(w)}/>
+        </>
+      )}
+
       {!searchQuery&&(
         <div className="flex gap-2 mb-5">
           {[['feed','Latest'],['bookmarks','Bookmarks']].map(([tab,label])=>(
@@ -338,7 +521,15 @@ function NewsFeed({articles,loading,error,searchQuery,onOpen,newsBookmarks,onTog
 
       {!searchQuery&&activeTab==='feed'&&<div className="mb-5"><NewsCategoryBar active={newsCategory} onChange={onNewsCategory}/></div>}
 
-      {searchQuery&&<p className="mb-5 text-sm text-slate-500 dark:text-slate-400">{list.length===0?'No results for ':`${list.length} result${list.length!==1?'s':''} for `}<span className="font-semibold text-slate-800 dark:text-white">"{searchQuery}"</span></p>}
+      {searchQuery&&(
+        <div className="mb-5 flex items-center gap-3">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{list.length===0?'No results for ':`${list.length} result${list.length!==1?'s':''} for `}</p>
+          <button onClick={()=>onSearchQuery&&onSearchQuery('')} className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 px-3 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
+            "{searchQuery}"
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      )}
 
       {error&&(
         <div className="rounded-2xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 px-4 py-3 text-sm text-rose-800 dark:text-rose-200 mb-6">
@@ -523,13 +714,34 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
     'Follow the story to track how the timeline changes day by day.',
   ])
 
+  // Generate insights for the engage section
+  const insights = useMemo(() => {
+    if (!story) return null
+    return generateInsights(
+      { title: story.title, description: story.description, content: story.article },
+      story.question
+    )
+  }, [story?.id])
+
+
   useEffect(() => {
     if (story) {
       window.scrollTo(0, 0)
+    } else {
+      // Story not in memory (page refresh loses live news state) — redirect home after 2s
+      const t = setTimeout(() => onBack(), 2000)
+      return () => clearTimeout(t)
     }
   }, [storyId])
 
-  if (!story) return <div className="py-24 text-center">Story not found</div>
+  if (!story) return (
+    <div className="py-24 text-center">
+      <p className="text-4xl mb-3">📰</p>
+      <p className="font-semibold text-slate-700 dark:text-slate-300">This article is no longer in memory</p>
+      <p className="text-sm text-slate-400 mt-1">Redirecting you to the feed…</p>
+      <button onClick={onBack} className="mt-4 text-sm font-bold text-indigo-500 hover:underline">Go to Feed now</button>
+    </div>
+  )
 
   const currentAnswer = savedAnswer[String(story.id)] || null
   const currentSimulated = showSimulatedUpdate[String(story.id)] || false
@@ -599,7 +811,7 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
       Title: ${story.title}.
       Thread Timeline: ${timelineToShow.map(t => `${t.date}, ${t.event}. ${t.details}`).join('. ')}.
       AI Recap: ${recapLines.map((l, i) => `Point ${i + 1}. ${l}`).join(' ')}.
-      Today's Full Article: ${(expandedText || articleText).replace(/\[\+\d+\s*chars\]/g, '').replace(/Read the original article:\s*https?:\/\/[^\s]+/i, '').replace(/\n/g, '. ')}.
+      Today's Full Article: ${(articleFull || articleText).replace(/\[\+\d+\s*chars\]/g, '').replace(/Read the original article:\s*https?:\/\/[^\s]+/i, '').replace(/\n/g, '. ')}.
     `;
     const utterance = new SpeechSynthesisUtterance(textToSpeak)
     utterance.onend = () => setIsPlaying(false)
@@ -679,57 +891,96 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
 
       <div className="mx-auto max-w-3xl px-4 pt-8 space-y-10">
 
-        {/* ── THREAD with LINKS ── */}
+        {/* ── THREAD with LINKS — revamped timeline ── */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2"><div className="w-1 h-5 rounded-full bg-amber-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">🧵 Thread — timeline</span></div>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">Tap an event · add a note</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">{timelineToShow.length} events</span>
+              <span className="text-[11px] text-slate-300 dark:text-slate-600">·</span>
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">Tap to expand</span>
+            </div>
           </div>
           {relErr&&<div className="mb-4 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">Couldn't load related coverage. ({relErr})</div>}
-          <div className="rounded-3xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-5">
-            <div className="relative pl-6">
-              <div className="absolute left-[5px] top-3 bottom-3 w-px bg-amber-200 dark:bg-amber-800"/>
+
+          {/* Timeline progress overview */}
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex-1 h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-red-400 transition-all duration-500" style={{width:`${Math.min(100, ((expandedIndex??-1)+1)/timelineToShow.length*100)}%`}}/>
+            </div>
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0">{expandedIndex!==null?`${expandedIndex+1}/${timelineToShow.length}`:`0/${timelineToShow.length}`}</span>
+          </div>
+
+          <div className="rounded-3xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-6 sm:p-8">
+            <div className="relative pl-10">
+              {/* Gradient timeline connector */}
+              <div className="absolute left-[14px] top-4 bottom-4 w-1 rounded-full bg-gradient-to-b from-amber-400 via-orange-300 to-red-300 dark:from-amber-600 dark:via-orange-700 dark:to-red-800"/>
               <div className="space-y-2">
                 {timelineToShow.map((item,i)=>{
                   const isOpen=expandedIndex===i
+                  const isLast=i===timelineToShow.length-1
                   const note=annotations[`${story.id}_${i}`]
                   const isAnnotating=annotatingIndex===i
                   return(
-                    <div key={i}>
+                    <div key={i} className="tl-item" style={{animationDelay:`${i*80}ms`}}>
                       <button type="button" onClick={()=>{setExpandedIndex(p=>p===i?null:i);setAnnotatingIndex(null)}}
-                        className={`relative w-full text-left pl-5 pr-4 py-3 rounded-2xl border transition-all ${isOpen?'border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 shadow-sm':'border-transparent hover:border-amber-200 dark:hover:border-amber-800 hover:bg-white/60 dark:hover:bg-slate-900/60'}`}>
-                        <div className={`absolute left-[-17px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 transition-colors ${isOpen?'border-amber-500 bg-amber-400':'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950'}`}/>
-                        {note&&<div className="absolute right-3 top-3 w-2 h-2 rounded-full bg-indigo-400" title="Has annotation"/>}
-                        <div className="flex items-center justify-between gap-2">
-                          <time className="text-[11px] font-bold text-amber-700 dark:text-amber-500">{item.date}</time>
-                          <svg className={`shrink-0 text-amber-400 dark:text-amber-600 transition-transform ${isOpen?'rotate-180':''}`} width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5l5 5 5-5"/></svg>
+                        className={`relative w-full text-left pl-8 pr-5 py-5 rounded-2xl border transition-all duration-200 ${isOpen?'border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 shadow-lg shadow-amber-100/50 dark:shadow-amber-900/30':'border-transparent hover:border-amber-200 dark:hover:border-amber-800 hover:bg-white/70 dark:hover:bg-slate-900/70'}`}>
+                        {/* Timeline node */}
+                        <div className={`absolute left-[-28px] top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full transition-all duration-300 ${isOpen?'w-10 h-10 border-[3px] border-amber-500 bg-amber-400 shadow-lg shadow-amber-200 dark:shadow-amber-900 tl-node-active':'w-7 h-7 border-[3px] border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 hover:border-amber-400'}`}>
+                          {isOpen&&<span className="text-xs font-black text-white">{i+1}</span>}
+                          {!isOpen&&<span className="text-[9px] font-bold text-amber-400 dark:text-amber-600">{i+1}</span>}
                         </div>
-                        <p className="mt-0.5 text-[13px] font-medium text-slate-800 dark:text-slate-200 leading-snug"><JargonText text={item.event}/></p>
+                        {/* Last event indicator */}
+                        {isLast&&!isOpen&&<div className="absolute left-[-22px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-red-400 animate-pulse"/>}
+                        {note&&<div className="absolute right-4 top-4 flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-indigo-400"/><span className="text-[10px] text-indigo-400 font-bold">note</span></div>}
+                        <div className="flex items-center gap-2.5 mb-2">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-900/40 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-400">
+                            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            {item.date}
+                          </span>
+                          {isLast&&<span className="rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-1 text-[11px] font-bold text-red-600 dark:text-red-400">Latest</span>}
+                          <div className="flex-1"/>
+                          <svg className={`shrink-0 text-amber-400 dark:text-amber-600 transition-transform duration-200 ${isOpen?'rotate-180':''}`} width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5l5 5 5-5"/></svg>
+                        </div>
+                        <p className={`text-[15px] sm:text-base font-semibold leading-snug ${isOpen?'text-slate-900 dark:text-white':'text-slate-700 dark:text-slate-300'}`}><JargonText text={item.event}/></p>
+
+                        {/* Expanded details with animation */}
                         {isOpen&&(
-                          <div className="mt-2.5 border-t border-amber-100 dark:border-amber-900 pt-2.5 space-y-2">
-                            <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400"><JargonText text={item.details}/></p>
+                          <div className="tl-details-enter mt-4 border-t border-amber-100 dark:border-amber-900 pt-4 space-y-4">
+                            <p className="text-[14px] leading-relaxed text-slate-600 dark:text-slate-400"><JargonText text={item.details}/></p>
                             {Array.isArray(item.links)&&item.links.length>0?(
-                              <div className="space-y-1.5">
+                              <div className="flex flex-wrap gap-2">
                                 {item.links.map((link, idx)=>(
-                                  <a key={`${link.url}-${idx}`} href={link.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 mr-3 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                                  <a key={`${link.url}-${idx}`} href={link.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 px-3.5 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
                                     {link.source||`Source ${idx+1}`}
-                                    <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 3h4v4"/><path d="M9 3L3 9"/></svg>
+                                    <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 2h4v4"/><path d="M8 2L2 8"/></svg>
                                   </a>
                                 ))}
                               </div>
                             ):item.url&&(
-                              <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                              <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 px-3.5 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
                                 {item.source||'Source'}
-                                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 3h4v4"/><path d="M9 3L3 9"/></svg>
+                                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 2h4v4"/><path d="M8 2L2 8"/></svg>
                               </a>
                             )}
+
+                            {/* Navigation between events */}
+                            <div className="flex items-center justify-between pt-2">
+                              <button type="button" disabled={i===0} onClick={(e)=>{e.stopPropagation();setExpandedIndex(i-1);setAnnotatingIndex(null)}} className="text-xs font-bold text-amber-600 dark:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed hover:text-amber-800 transition flex items-center gap-1.5">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 2L4 6l4 4"/></svg>Previous
+                              </button>
+                              <span className="text-xs text-slate-400 font-bold">{i+1} of {timelineToShow.length}</span>
+                              <button type="button" disabled={isLast} onClick={(e)=>{e.stopPropagation();setExpandedIndex(i+1);setAnnotatingIndex(null)}} className="text-xs font-bold text-amber-600 dark:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed hover:text-amber-800 transition flex items-center gap-1.5">
+                                Next<svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 2l4 4-4 4"/></svg>
+                              </button>
+                            </div>
                           </div>
                         )}
                       </button>
 
                       {/* annotation area */}
                       {isOpen&&(
-                        <div className="ml-0 mt-1.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 p-3">
+                        <div className="ml-4 mt-1.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 p-3 tl-details-enter">
                           {note&&!isAnnotating&&(
                             <div className="flex items-start justify-between gap-2">
                               <div>
@@ -855,9 +1106,61 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
           </div>
         </section>
 
-        {/* ── ENGAGE ── */}
+        {/* ── INSIGHTS + ENGAGE ── */}
         <section>
           <div className="flex items-center gap-2 mb-4"><div className="w-1 h-5 rounded-full bg-violet-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">🎯 Engage</span></div>
+
+          {/* ── Insights Panel (contextual background before the question) ── */}
+          {insights&&(
+            <div className="rounded-3xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20 p-5 mb-4 space-y-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">💡 Context & Insights</p>
+
+              {/* Why it matters */}
+              <div className="rounded-2xl border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-500 mb-1">Why this matters</p>
+                <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{insights.whyMatters}</p>
+              </div>
+
+              {/* Key facts extracted from the article */}
+              {insights.keyFacts.length>0&&(
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-500">📌 Key numbers</p>
+                  {insights.keyFacts.map((fact,i)=>(
+                    <div key={i} className="rounded-2xl border border-indigo-100 dark:border-indigo-900 bg-white dark:bg-slate-900 px-4 py-2.5 flex items-start gap-3">
+                      <span className="shrink-0 mt-0.5 w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold flex items-center justify-center">{fact.type==='percentage'?'%':fact.type==='amount'?'₹':'#'}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{fact.value}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mt-0.5">{fact.context}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Community pulse — simulated poll */}
+              {insights.poll&&insights.poll.length>0&&(
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 dark:text-indigo-500 mb-2">📊 Community pulse — how others leaned</p>
+                  <div className="space-y-2">
+                    {insights.poll.map((p,i)=>(
+                      <div key={i} className="rounded-xl overflow-hidden">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-slate-600 dark:text-slate-400 font-medium truncate pr-2">{p.label}</span>
+                          <span className="text-indigo-600 dark:text-indigo-400 font-bold shrink-0">{p.pct}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-violet-500 transition-all duration-700" style={{width:`${p.pct}%`}}/>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 italic">Based on reader engagement patterns</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Engage Question ── */}
           <div className="rounded-3xl border border-violet-200 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 p-5">
             {currentAnswer&&<div className="mb-4 rounded-2xl border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 px-4 py-3 text-sm text-violet-900 dark:text-violet-300"><span className="font-bold">Your answer:</span>{' '}{String.fromCharCode(65+currentAnswer.optionIndex)}. {currentAnswer.optionLabel}</div>}
             <p className="text-base font-bold text-slate-900 dark:text-white leading-snug" style={{fontFamily:'Georgia,serif'}}>{story.question.text}</p>
@@ -872,6 +1175,7 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
             </form>
           </div>
         </section>
+
 
         {/* ── SIMULATED UPDATE ── */}
         {currentSimulated&&story.simulatedUpdate&&(
@@ -988,17 +1292,61 @@ function HistoryDrawer({items,onClose,onPick}){
 function ProfilePanel({onClose,followedIds,readingHistory,interests,allFeedback,streak,onShowPredictions}){
   const avg=allFeedback.length?(allFeedback.reduce((s,f)=>s+f.rating,0)/allFeedback.length).toFixed(1):null
   const annotatedCount=Object.keys(load(LS.ANNOTATIONS,{})).length
+
+  // Build 7-day reading heatmap
+  const weekHeatmap = useMemo(()=>{
+    const days = []
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    for (let i=6;i>=0;i--) {
+      const d = new Date(Date.now()-i*86400000)
+      const dayStr = d.toDateString()
+      const count = readingHistory.filter(h=>{
+        const hd = h.lastOpened ? new Date(h.lastOpened).toDateString() : ''
+        return hd === dayStr
+      }).length
+      days.push({name:dayNames[d.getDay()],date:d.getDate(),count,isToday:i===0})
+    }
+    return days
+  },[readingHistory])
+
+  const streakMessage = streak>=7?'Amazing! A full week streak! 🏆':streak>=3?'Great momentum! Keep it going! 💪':streak>=1?'Nice start! Read daily to build your streak.':'Read today to start your streak!'
+
   return(
     <Drawer onClose={onClose}>
       <div className="px-5 pt-6 pb-5 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-4">
           <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-2xl font-bold shadow-sm">N
-            {streak>1&&<span className="absolute -bottom-1 -right-1 rounded-full bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5">{streak}d🔥</span>}
+            {streak>=1&&<span className="absolute -bottom-1 -right-1 rounded-full bg-orange-500 text-white text-[9px] font-bold px-1.5 py-0.5">{streak}d🔥</span>}
           </div>
           <div><p className="font-bold text-slate-900 dark:text-white text-base">Demo Reader</p><p className="text-xs text-slate-400 mt-0.5">All data local · Bengaluru</p></div>
           <button onClick={onClose} className="ml-auto w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold hover:bg-slate-200 transition">✕</button>
         </div>
       </div>
+
+      {/* Streak & Reading Heatmap */}
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">🔥 Reading streak</p>
+          <span className="text-sm font-bold text-orange-600 dark:text-orange-400">{streak} day{streak!==1?'s':''}</span>
+        </div>
+        <div className="grid grid-cols-7 gap-1.5 mb-3">
+          {weekHeatmap.map((day,i)=>(
+            <div key={i} className="text-center">
+              <p className="text-[9px] text-slate-400 mb-1">{day.name}</p>
+              <div className={`mx-auto w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
+                day.count>=3?'bg-orange-500 text-white shadow-sm shadow-orange-200 dark:shadow-orange-900':
+                day.count>=1?'bg-orange-200 dark:bg-orange-900/50 text-orange-700 dark:text-orange-400':
+                'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600'
+              } ${day.isToday?'ring-2 ring-orange-400 ring-offset-1 ring-offset-white dark:ring-offset-slate-950':''}`}>
+                {day.count||'·'}
+              </div>
+              <p className="text-[8px] text-slate-300 dark:text-slate-600 mt-0.5">{day.date}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 text-center">{streakMessage}</p>
+      </div>
+
       <div className="px-5 py-4 grid grid-cols-4 gap-2 border-b border-slate-100 dark:border-slate-800">
         {[{label:'Read',value:readingHistory.length},{label:'Following',value:followedIds.length},{label:'Notes',value:annotatedCount},{label:'Avg ★',value:avg||'—'}].map(s=>(
           <div key={s.label} className="rounded-2xl bg-slate-50 dark:bg-slate-800 px-2 py-3 text-center">
@@ -1089,6 +1437,10 @@ function AppContent() {
   }
 
   const openNewsArticle = (article) => {
+    // --- Smart engage question from title + description ---
+    const engageQ = generateSmartQuestion(article)
+
+
     // Convert live news article to a story thread
     const simulatedStory = {
       id: article.url,
@@ -1109,11 +1461,11 @@ function AppContent() {
       recap: [
         'Live updates from NewsAPI.',
         'This is a developing event.',
-        'Predict what happens next.'
+        'Share your perspective below.'
       ],
       article: `(Live) ${article.description || ''}\n\nSource: ${article.source}`,
-      question: { text: 'What is the most likely outcome?', options: ['Situation escalates', 'Resolved quickly', 'No major impact'] },
-      simulatedUpdate: { actualOutcome: 'True outcomes will unfold over time.', outcomeSummary: 'Pending development' }
+      question: engageQ,
+      simulatedUpdate: null
     }
     // Add to storiesData so it can be found by StoryView
     setStoriesData(prev => {
@@ -1315,6 +1667,7 @@ function AppContent() {
                   onNewsCategory={setNewsCategory}
                   onRefresh={()=>setNewsRefreshTick(t=>t+1)}
                   refreshing={newsLoading&&newsArticles.length>0}
+                  onSearchQuery={(w)=>{setSearchQuery(w);if(location.pathname!=='/') navigate('/')}}
                 />
               ):(
                 <>

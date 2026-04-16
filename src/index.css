@@ -9,3 +9,74 @@ body {
 #root {
   min-height: 100dvh;
 }
+
+/* ─── Timeline expand/collapse animation ─────────────────────────── */
+.tl-details-enter {
+  animation: tlSlideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes tlSlideDown {
+  from { opacity: 0; max-height: 0; transform: translateY(-6px); }
+  to   { opacity: 1; max-height: 600px; transform: translateY(0); }
+}
+
+/* Timeline node pulse when active */
+.tl-node-active {
+  animation: tlPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes tlPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+}
+
+/* Timeline item stagger animation */
+.tl-item {
+  animation: tlFadeIn 0.4s ease-out both;
+}
+
+@keyframes tlFadeIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Breaking news banner ──────────────────────────────────────── */
+.breaking-pulse {
+  animation: breakingPulse 2s ease-in-out infinite;
+}
+
+@keyframes breakingPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.7; }
+}
+
+.breaking-slide-in {
+  animation: breakingSlide 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes breakingSlide {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Sentiment dot pulse ───────────────────────────────────────── */
+.sentiment-dot {
+  animation: sentimentPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes sentimentPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.3); }
+}
+
+/* ─── Card hover glow ───────────────────────────────────────────── */
+.card-glow:hover {
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.15),
+              0 8px 25px -5px rgba(99, 102, 241, 0.08);
+}
+
+/* ─── Trending bar scroll shadow ────────────────────────────────── */
+.trending-scroll {
+  mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%);
+}

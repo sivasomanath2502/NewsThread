@@ -1,4 +1,6 @@
 import { stories as fallbackStories } from './stories.jsx'
+import { generateSmartQuestion } from './smartEngage.js'
+
 
 const CACHE_PREFIX = 'nt_daily_news_v4'
 const DEFAULT_INTERESTS = ['Politics', 'Technology', 'Health', 'Science', 'Climate']
@@ -201,16 +203,9 @@ function toStory(article, index, selectedInterests) {
 
   const articleBody = bodyList.filter(Boolean).join('\n\n');
 
-  // Make question more related to the article
-  const titleKeywords = (article.title || '').replace(/[^a-zA-Z\s]/g, '').trim().split(/\s+/).slice(0, 3).join(' ') || category;
-  const questionText = `What do you predict will happen next in the "${titleKeywords}" story?`;
-  
-  // Use category-specific options if available, otherwise fall back to generic but sensible ones
-  const questionOptions = QUESTION_BANK[category] || [
-    `Situation improves or resolves`,
-    `Further complications arise`,
-    `No significant change expected`
-  ];
+  // Generate article-specific question using smart engage system
+  const smartQ = generateSmartQuestion(article);
+
 
   return {
     id: `newsapi-${index}-${article.publishedAt || Date.now()}`,
@@ -223,10 +218,8 @@ function toStory(article, index, selectedInterests) {
     timeline: buildTimeline(article),
     recap: buildRecap(article),
     article: articleBody,
-    question: {
-      text: questionText,
-      options: questionOptions,
-    },
+    question: smartQ,
+
     simulatedUpdate: null,
     sourceUrl: article.url || '',
     publishedAt: article.publishedAt || new Date().toISOString(),
