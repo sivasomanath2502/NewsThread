@@ -14,12 +14,12 @@ const app = express()
 
 function mapArticle(a) {
   return {
-    title:       a.title       ?? '',
+    title: a.title ?? '',
     description: a.description ?? '',
-    urlToImage:  a.urlToImage  ?? '',
+    urlToImage: a.urlToImage ?? '',
     publishedAt: a.publishedAt ?? '',
-    source:      a.source?.name ?? '',
-    url:         a.url         ?? '',
+    source: a.source?.name ?? '',
+    url: a.url ?? '',
   }
 }
 
@@ -37,6 +37,7 @@ function setCached(key, data) {
 
 function getApiKey(res) {
   const apiKey = process.env.NEWS_API_KEY
+  console.log(process.env.NEWS_API_KEY);
   if (!apiKey) {
     res.status(500).json({
       success: false,
@@ -64,12 +65,12 @@ function getApiKey(res) {
  */
 async function handleTopHeadlines(req, res) {
   const category = typeof req.query.category === 'string' ? req.query.category.trim() : ''
-  const q        = typeof req.query.q        === 'string' ? req.query.q.trim()        : ''
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   const pageSize = Math.min(Number(req.query.pageSize) || 30, 100)
-  const bust     = !!req.query.bust
+  const bust = !!req.query.bust
 
   const cacheKey = `headlines::${category}::${q}::${pageSize}`
-  const cached   = getCached(cacheKey, bust)
+  const cached = getCached(cacheKey, bust)
   if (cached) return res.json({ ...cached, cached: true })
 
   const apiKey = getApiKey(res)
@@ -78,12 +79,12 @@ async function handleTopHeadlines(req, res) {
   /** Build a NewsAPI top-headlines URL for a given country or language */
   function buildUrl({ country, language }) {
     const u = new URL('https://newsapi.org/v2/top-headlines')
-    u.searchParams.set('apiKey',   apiKey)
+    u.searchParams.set('apiKey', apiKey)
     u.searchParams.set('pageSize', String(pageSize))
-    if (country)  u.searchParams.set('country',  country)
+    if (country) u.searchParams.set('country', country)
     if (language) u.searchParams.set('language', language)
     if (category) u.searchParams.set('category', category)
-    if (q)        u.searchParams.set('q', q)
+    if (q) u.searchParams.set('q', q)
     // NewsAPI requires at least one filter other than apiKey
     if (!country && !language && !category && !q) u.searchParams.set('q', 'news')
     return u
@@ -91,14 +92,14 @@ async function handleTopHeadlines(req, res) {
 
   // India keyword queries per category (used as fallback when country=in returns 0)
   const INDIA_QUERIES = {
-    sports:        'IPL OR cricket OR India sports OR kabaddi OR hockey India',
-    technology:    'India technology OR Indian startup OR ISRO OR Indian AI',
-    business:      'India economy OR BSE OR NSE OR RBI OR Indian markets',
-    health:        'India health OR Indian hospital OR AIIMS OR Indian medicine',
-    science:       'India science OR ISRO OR Indian research OR DRDO',
+    sports: 'IPL OR cricket OR India sports OR kabaddi OR hockey India',
+    technology: 'India technology OR Indian startup OR ISRO OR Indian AI',
+    business: 'India economy OR BSE OR NSE OR RBI OR Indian markets',
+    health: 'India health OR Indian hospital OR AIIMS OR Indian medicine',
+    science: 'India science OR ISRO OR Indian research OR DRDO',
     entertainment: 'Bollywood OR Indian cinema OR OTT India OR Indian music',
-    general:       'India news OR Indian government OR BJP OR Congress',
-    '':            'India OR IPL OR cricket OR Bollywood OR ISRO OR Indian',
+    general: 'India news OR Indian government OR BJP OR Congress',
+    '': 'India OR IPL OR cricket OR Bollywood OR ISRO OR Indian',
   }
 
   try {
@@ -130,10 +131,10 @@ async function handleTopHeadlines(req, res) {
       const indiaQ = (q ? `${q} India` : INDIA_QUERIES[category] || INDIA_QUERIES[''])
       try {
         const indiaEverythingUrl = new URL('https://newsapi.org/v2/everything')
-        indiaEverythingUrl.searchParams.set('apiKey',   apiKey)
-        indiaEverythingUrl.searchParams.set('q',        indiaQ)
+        indiaEverythingUrl.searchParams.set('apiKey', apiKey)
+        indiaEverythingUrl.searchParams.set('q', indiaQ)
         indiaEverythingUrl.searchParams.set('language', 'en')
-        indiaEverythingUrl.searchParams.set('sortBy',   'publishedAt')
+        indiaEverythingUrl.searchParams.set('sortBy', 'publishedAt')
         indiaEverythingUrl.searchParams.set('pageSize', String(pageSize))
         const indiaEr = await fetch(indiaEverythingUrl)
         const indiaEj = await indiaEr.json().catch(() => ({}))
@@ -141,7 +142,7 @@ async function handleTopHeadlines(req, res) {
           indiaArticles = (indiaEj.articles || [])
             .filter(a => a.title && a.title !== '[Removed]')
             .map(mapArticle)
-          console.log(`[top-headlines] India fallback via /everything q="${indiaQ.slice(0,50)}" → ${indiaArticles.length}`)
+          console.log(`[top-headlines] India fallback via /everything q="${indiaQ.slice(0, 50)}" → ${indiaArticles.length}`)
         }
       } catch (ie) {
         console.warn('[top-headlines] India keyword fallback failed:', ie.message)
@@ -158,7 +159,7 @@ async function handleTopHeadlines(req, res) {
       }
     }
 
-    console.log(`[top-headlines] India:${indiaArticles.length} Global:${globalArticles.length} → Merged:${articles.length} (category="${category||'all'}")`)
+    console.log(`[top-headlines] India:${indiaArticles.length} Global:${globalArticles.length} → Merged:${articles.length} (category="${category || 'all'}")`)
 
     if (!articles.length) {
       return res.status(502).json({ success: false, error: 'No articles returned from NewsAPI', articles: [] })
@@ -184,18 +185,18 @@ async function handleTopHeadlines(req, res) {
  *   bust      — any truthy value skips cache
  */
 async function handleEverything(req, res) {
-  const q        = typeof req.query.q        === 'string' ? req.query.q.trim()        : ''
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   const language = typeof req.query.language === 'string' ? req.query.language.trim() : 'en'
-  const sortBy   = typeof req.query.sortBy   === 'string' ? req.query.sortBy.trim()   : 'publishedAt'
+  const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy.trim() : 'publishedAt'
   const pageSize = Math.min(Number(req.query.pageSize) || 12, 100)
-  const bust     = !!req.query.bust
+  const bust = !!req.query.bust
 
   if (!q) {
     return res.status(400).json({ success: false, error: 'q parameter is required for /everything', articles: [] })
   }
 
   const cacheKey = `everything::${q}::${language}::${sortBy}::${pageSize}`
-  const cached   = getCached(cacheKey, bust)
+  const cached = getCached(cacheKey, bust)
   if (cached) return res.json({ ...cached, cached: true })
 
   const apiKey = getApiKey(res)
@@ -203,14 +204,14 @@ async function handleEverything(req, res) {
 
   try {
     const url = new URL('https://newsapi.org/v2/everything')
-    url.searchParams.set('apiKey',   apiKey)
-    url.searchParams.set('q',        q)
+    url.searchParams.set('apiKey', apiKey)
+    url.searchParams.set('q', q)
     url.searchParams.set('language', language)
-    url.searchParams.set('sortBy',   sortBy)
+    url.searchParams.set('sortBy', sortBy)
     url.searchParams.set('pageSize', String(pageSize))
 
-    console.log(`[everything] → q="${q.slice(0,60)}..." pageSize=${pageSize}`)
-    const r    = await fetch(url)
+    console.log(`[everything] → q="${q.slice(0, 60)}..." pageSize=${pageSize}`)
+    const r = await fetch(url)
     const json = await r.json()
 
     if (json.status !== 'ok') {
@@ -234,9 +235,9 @@ async function handleEverything(req, res) {
 }
 
 // ── Routes ──────────────────────────────────────────────────────
-app.get('/api/news',               handleTopHeadlines)
+app.get('/api/news', handleTopHeadlines)
 app.get('/api/news/top-headlines', handleTopHeadlines)
-app.get('/api/news/everything',    handleEverything)
+app.get('/api/news/everything', handleEverything)
 
 /**
  * GET /api/article?url=<encoded-url>
@@ -461,7 +462,7 @@ if (process.env.NODE_ENV === 'production') {
 app.listen(PORT, () => {
   const key = process.env.NEWS_API_KEY
   console.log(`\n✅ NewsThread API server → http://localhost:${PORT}`)
-  console.log(`   API key : ${key ? `${key.slice(0,6)}…${key.slice(-4)} (loaded)` : '❌ NOT SET — add NEWS_API_KEY to .env'}`)
+  console.log(`   API key : ${key ? `${key.slice(0, 6)}…${key.slice(-4)} (loaded)` : '❌ NOT SET — add NEWS_API_KEY to .env'}`)
   console.log(`   Routes  : GET /api/news  (top-headlines, cached 15 min)`)
   console.log(`             GET /api/news/top-headlines`)
   console.log(`             GET /api/news/everything  (with /top-headlines fallback)`)
