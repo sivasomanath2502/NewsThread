@@ -1698,7 +1698,7 @@ function AppContent() {
       urlToImage: article.urlToImage,
       imageUrl: article.urlToImage,
       timeline: [
-        { date: 'Just now', event: 'Headline breaks', details: article.description || 'Details are emerging.' },
+        { date: 'Just now', event: article.title || 'Headline breaks', details: article.description || 'Details are emerging.' },
       ],
       recap: [
         'Live updates from NewsAPI.',
