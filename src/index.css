@@ -11,6 +11,7 @@ body {
   -webkit-font-smoothing: antialiased;
   font-family: 'Outfit', sans-serif;
   background-color: white;
+  overflow-x: hidden;
 }
 .dark body { background-color: #020617; }
 

@@ -215,8 +215,8 @@ function Navbar({ onGoHome, onToggleProfile, onToggleHistory, profileOpen, histo
           <>
             <button onClick={onGoHome} className="shrink-0 text-[17px] font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition" style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic' }}>NewsThread</button>
             {streak >= 1 && <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 px-2 py-0.5 text-[11px] font-bold text-orange-600 dark:text-orange-400">🔥 {streak} day{streak !== 1 ? 's' : ''}</span>}
-            <div className="flex-1" />
-            <div className="flex items-center gap-0.5">
+            <div className="flex-1 min-w-0" />
+            <div className="flex items-center gap-1 sm:gap-0.5 flex-wrap justify-end">
               <button onClick={openSearch} title="Search" className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition">
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><path d="M12 12l3 3" /></svg>
               </button>
@@ -1235,7 +1235,7 @@ function StoryView({ storiesData, isFollowing, onToggleFollow, savedAnswer, onSa
         </section>
 
         <section>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex flex-wrap gap-2">
               <button onClick={() => onToggleFollow(story.id)} className={`rounded-full px-4 py-2 text-sm font-bold border-2 transition-all active:scale-95 ${isFollowing.includes(story.id) ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-indigo-300 hover:text-indigo-700'}`}>{isFollowing.includes(story.id) ? '✓ Following' : '+ Follow'}</button>
               <button onClick={() => onToggleBookmark(story.id)} className={`rounded-full px-4 py-2 text-sm font-bold border-2 transition-all active:scale-95 ${isBookmarked.includes(story.id) ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-indigo-300'}`}>{isBookmarked.includes(story.id) ? '🔖 Saved' : '🔖 Save'}</button>
@@ -1325,11 +1325,11 @@ function StoryView({ storiesData, isFollowing, onToggleFollow, savedAnswer, onSa
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white editorial-serif tracking-tight">How do you read this situation?</h3>
               </div>
-              <div className="flex bg-slate-200/40 dark:bg-slate-800/40 p-1.5 rounded-2xl backdrop-blur-md border border-white/50 dark:border-slate-700/50 self-start">
-                <button type="button" onClick={() => setEngagementMode('quick')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${engagementMode === 'quick' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+              <div className="flex flex-wrap sm:flex-nowrap bg-slate-200/40 dark:bg-slate-800/40 p-1.5 rounded-2xl backdrop-blur-md border border-white/50 dark:border-slate-700/50 self-start w-full sm:w-auto">
+                <button type="button" onClick={() => setEngagementMode('quick')} className={`flex flex-1 justify-center items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${engagementMode === 'quick' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg> Quick Take
                 </button>
-                <button type="button" onClick={() => setEngagementMode('custom')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${engagementMode === 'custom' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                <button type="button" onClick={() => setEngagementMode('custom')} className={`flex flex-1 justify-center items-center gap-2 px-3 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${engagementMode === 'custom' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" /></svg> Reflect
                 </button>
               </div>
