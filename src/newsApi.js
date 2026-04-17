@@ -138,7 +138,7 @@ function buildRecap(article) {
   const seen = new Set()
 
   for (const sentence of sentenceCandidates) {
-    const finalSentence = isCompleteSentence(sentence) ? sentence : `${sentence.replace(/[.]+$/,'').trim()}.`
+    const finalSentence = isCompleteSentence(sentence) ? sentence : `${sentence.replace(/[.]+$/, '').trim()}.`
     if (!isCompleteSentence(finalSentence)) continue
 
     const n = normalise(finalSentence)
@@ -171,10 +171,10 @@ function buildRecap(article) {
 
 function toStory(article, index, selectedInterests) {
   const category = inferCategory(article, selectedInterests)
-  
+
   // Strip NewsAPI truncation characters
   let cleanContent = (article.content || '').replace(/\[\+\d+\s*chars\]/g, '').trim();
-  
+
   // Ensure we don't end on incomplete sentences
   const ensureCompleteSentence = (text) => {
     if (!text) return '';
@@ -258,7 +258,7 @@ export async function fetchDailyStories(interests = [], { bust = false } = {}) {
   })
   if (bust) params.set('bust', '1')
 
-  const response = await fetch(`/api/news/everything?${params.toString()}`)
+  const response = await fetch(`/api/news?${params.toString()}`)
 
   if (!response.ok) {
     let details = ''
@@ -294,9 +294,9 @@ function keywordQueryFromTitle(title) {
     .filter(Boolean)
 
   const stop = new Set([
-    'the','a','an','and','or','to','of','in','on','for','with','as','at','by','from',
-    'is','are','was','were','be','been','being','it','this','that','these','those',
-    'after','before','over','into','across','amid','new','says','report',
+    'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'with', 'as', 'at', 'by', 'from',
+    'is', 'are', 'was', 'were', 'be', 'been', 'being', 'it', 'this', 'that', 'these', 'those',
+    'after', 'before', 'over', 'into', 'across', 'amid', 'new', 'says', 'report',
   ])
 
   const keywords = raw.filter(w => w.length >= 4 && !stop.has(w)).slice(0, 7)
@@ -313,9 +313,9 @@ function tokenise(text) {
 
 function significantTokens(text) {
   const stop = new Set([
-    'the','a','an','and','or','to','of','in','on','for','with','as','at','by','from',
-    'is','are','was','were','be','been','being','it','this','that','these','those',
-    'after','before','over','into','across','amid','new','says','report','news','day',
+    'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'with', 'as', 'at', 'by', 'from',
+    'is', 'are', 'was', 'were', 'be', 'been', 'being', 'it', 'this', 'that', 'these', 'those',
+    'after', 'before', 'over', 'into', 'across', 'amid', 'new', 'says', 'report', 'news', 'day',
   ])
   return tokenise(text).filter((t) => t.length >= 4 && !stop.has(t))
 }
@@ -420,7 +420,7 @@ export async function fetchRelatedTimeline(story) {
     pageSize: '10',
   })
 
-  const res = await fetch(`/api/news/everything?${params.toString()}`)
+  const res = await fetch(`/api/news?${params.toString()}`)
   if (!res.ok) {
     let details = ''
     try {
@@ -437,18 +437,18 @@ export async function fetchRelatedTimeline(story) {
 
   const timeline = dedupeTimeline(
     articles
-    .filter(a => a?.title && a.title !== '[Removed]')
-    .filter((a) => isLikelyRelated(story, a))
-    .map(articleToTimelineItem),
+      .filter(a => a?.title && a.title !== '[Removed]')
+      .filter((a) => isLikelyRelated(story, a))
+      .map(articleToTimelineItem),
   )
 
   // Fallback gracefully if filtering is too strict for a niche topic.
   const finalTimeline = timeline.length
     ? timeline
     : dedupeTimeline(articles
-        .filter(a => a?.title && a.title !== '[Removed]')
-        .slice(0, 6)
-        .map(articleToTimelineItem))
+      .filter(a => a?.title && a.title !== '[Removed]')
+      .slice(0, 6)
+      .map(articleToTimelineItem))
 
   localStorage.setItem(cacheKey, JSON.stringify(finalTimeline))
   return finalTimeline
