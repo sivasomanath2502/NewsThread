@@ -868,7 +868,32 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
     setAnnotatingIndex(null)
   }
 
-  const timelineToShow = relatedTimeline.length ? relatedTimeline : story.timeline
+  const timelineToShow = useMemo(() => {
+    const base = story.timeline || [];
+    if (!relatedTimeline || relatedTimeline.length === 0) return base;
+    
+    // Build a rich, merged timeline: up to 10 related articles + the base items
+    const combined = [];
+    
+    // Sort related by date descending, take up to 10, then reverse for chronological display
+    relatedTimeline
+      .slice(0, 10)
+      .reverse()
+      .forEach((rel) => {
+        combined.push({
+          ...rel,
+          isArticleLink: true,
+          event: rel.event || (rel.source ? `Coverage: ${rel.source}` : 'Related Coverage'),
+          details: rel.details || rel.description || 'Further context on this development.'
+        });
+      });
+    
+    // Append the base story items (published + latest) at the end as the anchor
+    if (base[0]) combined.push(base[0]);
+    if (base[2]) combined.push({ ...base[2], isLatest: true });
+
+    return combined;
+  }, [story.timeline, relatedTimeline]);
 
   const handleSpeak = () => {
     if (isPlaying) {
@@ -961,143 +986,156 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
 
       <div className="mx-auto max-w-3xl px-4 pt-8 space-y-10">
 
-        {/* ── THREAD with LINKS — revamped timeline ── */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2"><div className="w-1 h-5 rounded-full bg-amber-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">🧵 Thread — timeline</span></div>
+        {/* ── CINEMATIC THREAD NARRATIVE ── */}
+        <section className="relative px-2">
+          <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500">{timelineToShow.length} events</span>
-              <span className="text-[11px] text-slate-300 dark:text-slate-600">·</span>
-              <span className="text-[11px] text-slate-400 dark:text-slate-500">Tap to expand</span>
+              <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/30">
+                <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-amber-600 dark:text-amber-400"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 dark:text-amber-400">The Journey</span>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white editorial-serif">Story Timeline</h2>
+              </div>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="text-[11px] font-bold text-slate-400">{timelineToShow.length} Key Events</span>
+              <div className="h-1.5 w-24 rounded-full bg-slate-100 dark:bg-slate-800 mt-1 overflow-hidden">
+                <div className="h-full bg-amber-500 transition-all duration-500" style={{width:`${Math.min(100, ((expandedIndex??-1)+1)/timelineToShow.length*100)}%`}}/>
+              </div>
             </div>
           </div>
-          {relErr&&<div className="mb-4 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">Couldn't load related coverage. ({relErr})</div>}
 
-          {/* Timeline progress overview */}
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex-1 h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-red-400 transition-all duration-500" style={{width:`${Math.min(100, ((expandedIndex??-1)+1)/timelineToShow.length*100)}%`}}/>
-            </div>
-            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0">{expandedIndex!==null?`${expandedIndex+1}/${timelineToShow.length}`:`0/${timelineToShow.length}`}</span>
-          </div>
-
-          <div className="rounded-3xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-6 sm:p-8">
-            <div className="relative pl-10">
-              {/* Gradient timeline connector */}
-              <div className="absolute left-[14px] top-4 bottom-4 w-1 rounded-full bg-gradient-to-b from-amber-400 via-orange-300 to-red-300 dark:from-amber-600 dark:via-orange-700 dark:to-red-800"/>
-              <div className="space-y-2">
-                {timelineToShow.map((item,i)=>{
-                  const isOpen=expandedIndex===i
-                  const isLast=i===timelineToShow.length-1
-                  const note=annotations[`${story.id}_${i}`]
-                  const isAnnotating=annotatingIndex===i
-                  return(
-                    <div key={i} className="tl-item" style={{animationDelay:`${i*80}ms`}}>
-                      <button type="button" onClick={()=>{setExpandedIndex(p=>p===i?null:i);setAnnotatingIndex(null)}}
-                        className={`relative w-full text-left pl-8 pr-5 py-5 rounded-2xl border transition-all duration-200 ${isOpen?'border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 shadow-lg shadow-amber-100/50 dark:shadow-amber-900/30':'border-transparent hover:border-amber-200 dark:hover:border-amber-800 hover:bg-white/70 dark:hover:bg-slate-900/70'}`}>
-                        {/* Timeline node */}
-                        <div className={`absolute left-[-28px] top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full transition-all duration-300 ${isOpen?'w-10 h-10 border-[3px] border-amber-500 bg-amber-400 shadow-lg shadow-amber-200 dark:shadow-amber-900 tl-node-active':'w-7 h-7 border-[3px] border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 hover:border-amber-400'}`}>
-                          {isOpen&&<span className="text-xs font-black text-white">{i+1}</span>}
-                          {!isOpen&&<span className="text-[9px] font-bold text-amber-400 dark:text-amber-600">{i+1}</span>}
-                        </div>
-                        {/* Last event indicator */}
-                        {isLast&&!isOpen&&<div className="absolute left-[-22px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-red-400 animate-pulse"/>}
-                        {note&&<div className="absolute right-4 top-4 flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-full bg-indigo-400"/><span className="text-[10px] text-indigo-400 font-bold">note</span></div>}
-                        <div className="flex items-center gap-2.5 mb-2">
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-900/40 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-400">
-                            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                            {item.date}
-                          </span>
-                          {isLast&&<span className="rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-1 text-[11px] font-bold text-red-600 dark:text-red-400">Latest</span>}
-                          <div className="flex-1"/>
-                          <svg className={`shrink-0 text-amber-400 dark:text-amber-600 transition-transform duration-200 ${isOpen?'rotate-180':''}`} width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5l5 5 5-5"/></svg>
-                        </div>
-                        <p className={`text-[15px] sm:text-base font-semibold leading-snug ${isOpen?'text-slate-900 dark:text-white':'text-slate-700 dark:text-slate-300'}`}><JargonText text={item.event}/></p>
-
-                        {/* Expanded details with animation */}
-                        {isOpen&&(
-                          <div className="tl-details-enter mt-4 border-t border-amber-100 dark:border-amber-900 pt-4 space-y-4">
-                            <p className="text-[14px] leading-relaxed text-slate-600 dark:text-slate-400"><JargonText text={item.details}/></p>
-                            {Array.isArray(item.links)&&item.links.length>0?(
-                              <div className="flex flex-wrap gap-2">
-                                {item.links.map((link, idx)=>(
-                                  <a key={`${link.url}-${idx}`} href={link.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 px-3.5 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
-                                    {link.source||`Source ${idx+1}`}
-                                    <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 2h4v4"/><path d="M8 2L2 8"/></svg>
-                                  </a>
-                                ))}
-                              </div>
-                            ):item.url&&(
-                              <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 px-3.5 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
-                                {item.source||'Source'}
-                                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 2h4v4"/><path d="M8 2L2 8"/></svg>
-                              </a>
-                            )}
-
-                            {/* Navigation between events */}
-                            <div className="flex items-center justify-between pt-2">
-                              <button type="button" disabled={i===0} onClick={(e)=>{e.stopPropagation();setExpandedIndex(i-1);setAnnotatingIndex(null)}} className="text-xs font-bold text-amber-600 dark:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed hover:text-amber-800 transition flex items-center gap-1.5">
-                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 2L4 6l4 4"/></svg>Previous
-                              </button>
-                              <span className="text-xs text-slate-400 font-bold">{i+1} of {timelineToShow.length}</span>
-                              <button type="button" disabled={isLast} onClick={(e)=>{e.stopPropagation();setExpandedIndex(i+1);setAnnotatingIndex(null)}} className="text-xs font-bold text-amber-600 dark:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed hover:text-amber-800 transition flex items-center gap-1.5">
-                                Next<svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 2l4 4-4 4"/></svg>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </button>
-
-                      {/* annotation area */}
-                      {isOpen&&(
-                        <div className="ml-4 mt-1.5 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 p-3 tl-details-enter">
-                          {note&&!isAnnotating&&(
-                            <div className="flex items-start justify-between gap-2">
+          <div className="relative pl-12">
+            {/* Animated Glow Connector */}
+            <div className="timeline-connector-glow" />
+            
+            <div className="space-y-6">
+              {timelineToShow.map((item, i) => {
+                const isOpen = expandedIndex === i;
+                const isLast = i === timelineToShow.length - 1;
+                
+                return (
+                  <div key={i} className={`timeline-thread-card thread-reveal ${isOpen ? 'timeline-item-active' : ''}`} style={{animationDelay: `${i*100}ms`}}>
+                    <div className={`timeline-node-dot ${isOpen ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+                    
+                    <button 
+                      onClick={() => setExpandedIndex(isOpen ? null : i)}
+                      className={`w-full text-left p-5 rounded-3xl border-2 transition-all duration-300 ${isOpen ? 'border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 shadow-xl shadow-amber-100/50 dark:shadow-none' : 'border-slate-100 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/30 hover:border-amber-200 dark:hover:border-amber-800'}`}
+                    >
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">{item.date}</span>
+                        {isLast && <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse" />}
+                      </div>
+                      <h3 className={`text-[16px] font-bold leading-tight ${isOpen ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                        <JargonText text={item.event} />
+                      </h3>
+                      
+                      {isOpen && (
+                        <div className="mt-4 pt-4 border-t border-amber-100 dark:border-amber-900/50 animate-in fade-in slide-in-from-top-2 duration-400 space-y-4">
+                          <p className="text-[15px] leading-relaxed text-slate-600 dark:text-slate-400 editorial-serif">
+                            <JargonText text={item.details} />
+                          </p>
+                          {(item.isArticleLink || item.isLatest) && item.url && (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-2 flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-950/30 dark:to-violet-950/20 border border-indigo-200 dark:border-indigo-800/60 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all group shadow-sm"
+                            >
                               <div>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-1">Your note</p>
-                                <p className="text-sm text-slate-700 dark:text-slate-300 italic">"{note}"</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-0.5">
+                                  {item.source ? `Source · ${item.source}` : 'Deep Dive Coverage'}
+                                </p>
+                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
+                                  Read full article
+                                </p>
                               </div>
-                              <button onClick={()=>{setAnnotatingIndex(i);setAnnotationDraft(note)}} className="text-[11px] font-bold text-indigo-500 hover:text-indigo-700 shrink-0">Edit</button>
-                            </div>
+                              <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 3h6v6M11 3L3 11"/></svg>
+                              </span>
+                            </a>
                           )}
-                          {!note&&!isAnnotating&&(
-                            <button onClick={()=>setAnnotatingIndex(i)} className="text-[11px] font-bold text-indigo-500 hover:text-indigo-700 flex items-center gap-1">
-                              <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 9L5 5l4-4m-4 4l1 4M5 5l-4 0"/></svg>Add a note to this event
-                            </button>
-                          )}
-                          {isAnnotating&&(
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-2">Your note</p>
-                              <textarea value={annotationDraft} onChange={e=>setAnnotationDraft(e.target.value)} rows={2} placeholder="Write your thoughts on this event…" className="w-full rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 resize-none outline-none focus:ring-2 focus:ring-indigo-400"/>
-                              <div className="flex gap-2 mt-2">
-                                <button onClick={()=>saveAnnotation(i)} className="rounded-xl bg-indigo-600 text-white px-3 py-1.5 text-xs font-bold hover:bg-indigo-700 transition">Save note</button>
-                                <button onClick={()=>{setAnnotatingIndex(null);setAnnotationDraft('')}} className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 transition">Cancel</button>
-                              </div>
+                          {item.links && item.links.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {item.links.map((link, idx) => (
+                                <a key={idx} href={link.url} target="_blank" rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:border-indigo-300 hover:text-indigo-600 transition">
+                                  {link.source || `Source ${idx + 1}`}
+                                  <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 2h4v4M8 2L2 8"/></svg>
+                                </a>
+                              ))}
                             </div>
                           )}
                         </div>
                       )}
-                    </div>
-                  )
-                })}
-              </div>
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        {/* ── RECAP ── */}
+        {/* ── AI RECAP ── */}
         <section>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2"><div className="w-1 h-5 rounded-full bg-emerald-500"/><span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">🤖 AI Recap</span></div>
-            <button onClick={()=>articleRef.current?.scrollIntoView({behavior:'smooth',block:'start'})} className="text-[11px] font-bold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition">Skip to article ↓</button>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" className="text-emerald-600 dark:text-emerald-400"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2zm0 0v10l4 2"/></svg>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 dark:text-emerald-400">AI Powered</span>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white editorial-serif">Story Recap</h2>
+              </div>
+            </div>
+            <button onClick={()=>articleRef.current?.scrollIntoView({behavior:'smooth',block:'start'})} className="text-xs font-bold text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition flex items-center gap-1">
+              Read Full Story
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 9l4 4 4-4"/></svg>
+            </button>
           </div>
-          <div className="rounded-3xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 p-5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-500 mb-4">3-line personalised catch-up</p>
-            <ol className="space-y-3">{recapLines.map((line,i)=>(
-              <li key={i} className="flex gap-3 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-                <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400 text-[11px] font-bold flex items-center justify-center mt-0.5">{i+1}</span><JargonText text={line}/>
-              </li>
-            ))}</ol>
+
+          <div className="rounded-[2.5rem] border border-emerald-200 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50/60 to-white dark:from-emerald-950/20 dark:to-slate-950 p-7 sm:p-10 relative overflow-hidden shadow-lg shadow-emerald-50 dark:shadow-none">
+            {/* Ambient glow */}
+            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-400/5 rounded-full blur-3xl -mr-24 -mt-24 pointer-events-none" />
+
+            {/* TL;DR headline */}
+            <div className="mb-6 relative z-10">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 mb-2">TL;DR</p>
+              <p className="text-[18px] sm:text-[20px] font-bold text-slate-900 dark:text-white leading-snug editorial-serif">
+                {recapLines[0]}
+              </p>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-4 my-6 relative z-10">
+              <div className="h-px flex-1 bg-emerald-100 dark:bg-emerald-900/50" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Key Points</span>
+              <div className="h-px flex-1 bg-emerald-100 dark:bg-emerald-900/50" />
+            </div>
+
+            {/* Key point cards */}
+            <div className="space-y-3 relative z-10">
+              {recapLines.slice(1).map((line, i) => (
+                <div key={i} className="flex gap-4 p-4 rounded-2xl bg-white/70 dark:bg-slate-900/50 border border-emerald-100 dark:border-emerald-900/40 backdrop-blur-sm">
+                  <div className="shrink-0 w-7 h-7 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-400 text-[11px] font-black flex items-center justify-center">
+                    {i + 1}
+                  </div>
+                  <p className="text-[14px] leading-relaxed text-slate-700 dark:text-slate-300">
+                    <JargonText text={line}/>
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer metadata */}
+            <div className="flex items-center justify-between mt-6 pt-5 border-t border-emerald-100 dark:border-emerald-900/50 relative z-10">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[11px] font-bold text-slate-400">Based on {timelineToShow.length} verified events</span>
+              </div>
+              <span className="text-[11px] font-bold text-slate-400">{story.readTime} read</span>
+            </div>
           </div>
         </section>
 
@@ -1119,6 +1157,24 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
             )}
           </div>
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-5 space-y-4">
+            {/* Cover image inside article */}
+            {(story.imageUrl || story.urlToImage) && (
+              <div className="-mx-5 -mt-5 mb-6 relative overflow-hidden rounded-t-3xl">
+                <div className="aspect-[16/7] relative">
+                  <img
+                    src={story.imageUrl || story.urlToImage}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-white/80 dark:from-slate-900/80 via-transparent to-transparent" />
+                  <div className="absolute bottom-4 left-5 right-5 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-white drop-shadow-sm">Full Coverage</span>
+                  </div>
+                </div>
+              </div>
+            )}
             {articleIsJSX ? (
               /* Render JSX articles from stories.jsx (with embedded JargonWord components) */
               <div>{story.article}</div>
@@ -1251,53 +1307,106 @@ function StoryView({storiesData,isFollowing,onToggleFollow,savedAnswer,onSaveAns
             </div>
           )}
 
-          {/* ── Engage Question ── */}
-          <div className="rounded-3xl border border-violet-200 dark:border-violet-900/50 bg-gradient-to-br from-violet-50 to-fuchsia-50 dark:from-violet-950/40 dark:to-fuchsia-950/20 p-6 shadow-sm overflow-hidden relative">
-            {currentAnswer ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"/><span className="text-[11px] font-bold uppercase tracking-widest text-violet-500 dark:text-violet-400">Response captured</span></div>
-                <div className="rounded-2xl border border-violet-200 dark:border-violet-800 bg-white/60 dark:bg-violet-900/30 px-5 py-4 text-sm text-violet-900 dark:text-violet-200 shadow-inner break-words">
-                  <span className="font-bold block mb-1">You responded:</span>
-                  <p className="text-[15px] italic">"{currentAnswer.optionLabel}"</p>
+          {/* ── SMART ENGAGEMENT NARRATIVE ── */}
+          <div className="rounded-[2.5rem] border border-violet-200 dark:border-violet-900/50 bg-gradient-to-br from-violet-50/50 to-white dark:from-violet-950/20 dark:to-slate-950 p-8 sm:p-12 shadow-2xl shadow-indigo-100 dark:shadow-none overflow-hidden relative">
+            {/* Ambient decorative elements */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-violet-400/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-400/5 rounded-full blur-3xl -ml-32 -mb-32 pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="flex h-2 w-2 rounded-full bg-violet-500 animate-ping" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-500 dark:text-violet-400">Smart Engagement</p>
                 </div>
+                <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white editorial-serif tracking-tight">How do you read this situation?</h3>
               </div>
-            ) : (
-              <>
-                <p className="text-lg font-bold text-slate-900 dark:text-white leading-relaxed mb-5" style={{fontFamily:'Georgia,serif'}}>{story.question.text}</p>
-                
-                {/* Visual Tab Switcher */}
-                <div className="flex bg-white/50 dark:bg-slate-950/50 rounded-xl p-1 mb-5 border border-violet-100 dark:border-violet-900">
-                  <button type="button" onClick={() => setEngagementMode('quick')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${engagementMode === 'quick' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-700 dark:text-violet-300 transform scale-[1.02]' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>⚡ Quick Take</button>
-                  <button type="button" onClick={() => setEngagementMode('custom')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all duration-300 ${engagementMode === 'custom' ? 'bg-white dark:bg-slate-800 shadow-sm text-violet-700 dark:text-violet-300 transform scale-[1.02]' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>✍️ Custom Perspective</button>
-                </div>
+              <div className="flex bg-slate-200/40 dark:bg-slate-800/40 p-1.5 rounded-2xl backdrop-blur-md border border-white/50 dark:border-slate-700/50 self-start">
+                <button type="button" onClick={() => setEngagementMode('quick')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${engagementMode === 'quick' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg> Quick Take
+                </button>
+                <button type="button" onClick={() => setEngagementMode('custom')} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${engagementMode === 'custom' ? 'bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Reflect
+                </button>
+              </div>
+            </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4 duration-300 animate-in fade-in slide-in-from-bottom-2">
-                  {engagementMode === 'quick' ? (
-                    <div className="space-y-2.5">
-                      {story.question.options.map((opt, i) => {
-                        const checked = selectedOption === i;
-                        return (
-                          <label key={i} className={`flex items-start gap-3.5 rounded-2xl border-2 px-4 py-3.5 cursor-pointer transition-all duration-200 ${checked ? 'border-violet-500 bg-white dark:bg-violet-900/40 transform scale-[1.01] shadow-md' : 'border-violet-200/60 dark:border-violet-900/40 bg-white/50 dark:bg-slate-900/50 hover:border-violet-300 hover:bg-white dark:hover:border-violet-700'}`}>
-                            <input type="radio" name={`q-${story.id}`} className="accent-violet-600 w-4 h-4 shrink-0 mt-0.5" checked={checked} onChange={() => {setSelectedOption(i); setSubmitted(false)}}/>
-                            <span className="text-[14px] font-medium leading-tight text-slate-800 dark:text-slate-200">{opt}</span>
-                          </label>
-                        )
-                      })}
+            <div className="relative z-10 mb-8 p-6 sm:p-8 rounded-[2rem] bg-white/80 dark:bg-slate-900/60 backdrop-blur-xl border border-violet-100 dark:border-violet-800/50 shadow-xl">
+              <p className="text-[18px] sm:text-[20px] leading-relaxed text-slate-800 dark:text-slate-200 font-medium editorial-serif tracking-tight">{story.question.text}</p>
+            </div>
+            
+            <div className="relative z-10">
+              <form onSubmit={handleSubmit} className="duration-500 animate-in fade-in slide-in-from-bottom-4">
+                {!submitted ? (
+                  <>
+                    {engagementMode === 'quick' ? (
+                      <div className="grid grid-cols-1 gap-3">
+                        {story.question.options.map((opt, i) => {
+                          const checked = selectedOption === i;
+                          return (
+                            <label key={i} className={`flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-all duration-300 border-2 ${checked ? 'border-violet-500 bg-violet-50/80 dark:bg-violet-900/40 shadow-md transform scale-[1.01]' : 'border-slate-100 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/40 hover:bg-white dark:hover:bg-slate-900 hover:border-violet-300 dark:hover:border-violet-700'}`}>
+                              <input type="radio" name={`q-${story.id}`} className="sr-only" checked={checked} onChange={() => {setSelectedOption(i); setSubmitted(false)}}/>
+                              <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors ${checked ? 'bg-violet-600 border-violet-600 text-white' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                                <span className="text-sm font-bold">{String.fromCharCode(65 + i)}</span>
+                              </span>
+                              <span className={`text-[15px] font-medium leading-tight ${checked ? 'text-violet-900 dark:text-violet-100 font-bold' : 'text-slate-700 dark:text-slate-300'}`}>{opt}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <textarea
+                          value={userPrediction}
+                          onChange={e => setUserPrediction(e.target.value)}
+                          rows={4}
+                          placeholder="Share your unique perspective..."
+                          className="w-full rounded-[2rem] border-2 border-violet-100 dark:border-violet-900/50 bg-white dark:bg-slate-900 p-6 text-[16px] leading-relaxed text-slate-800 dark:text-slate-200 focus:ring-4 focus:ring-violet-500/20 focus:border-violet-500 outline-none resize-none transition-all shadow-inner editorial-serif"
+                        />
+                      </div>
+                    )}
+                    <button type="submit" disabled={(engagementMode === 'quick' && selectedOption === null) || (engagementMode === 'custom' && !userPrediction.trim())} className="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 py-4 text-[15px] font-bold text-white hover:opacity-90 hover:shadow-xl shadow-violet-200 dark:shadow-none transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95">Record Insight</button>
+                  </>
+                ) : (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="rounded-[2rem] border-2 border-violet-500 bg-violet-50/80 dark:bg-violet-900/20 p-6 sm:p-8 shadow-inner relative overflow-hidden">
+                      <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-violet-400/20 blur-2xl" />
+                      
+                      <div className="flex items-center gap-2 mb-3 relative z-10">
+                        <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400">Insight Recorded</p>
+                      </div>
+                      <p className="text-[18px] leading-relaxed font-bold text-slate-900 dark:text-white mb-6 relative z-10">
+                        {currentAnswer ? currentAnswer.optionLabel : (selectedOption !== null ? story.question.options[selectedOption] : userPrediction)}
+                      </p>
+                    
+                      <div className="rounded-3xl bg-slate-900 dark:bg-slate-800 p-6 sm:p-8 text-white shadow-xl relative z-10 border border-slate-700">
+                        <div className="flex items-start gap-4 mb-3">
+                          <span className="text-2xl mt-1 block">🤖</span>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-400 mb-2">AI Contextual Reflection</p>
+                            <p className="text-[15px] leading-relaxed text-slate-200">
+                              {selectedOption !== null ? (
+                                `Your selection identifies a pivotal direction for this developing story. Given the ${timelineToShow.length} key events verified in our timeline, this pattern mirrors how ${story.category.toLowerCase()} stories hit crucial inflection points.`
+                              ) : (
+                                `A highly nuanced perspective. Your thoughts actively consider the ${timelineToShow.length} verified developments in the thread, recognizing the subtle complexities beyond standard choices.`
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-center mt-6">
+                        <button type="button" onClick={() => {setSubmitted(false); setSelectedOption(null); setUserPrediction('')}} className="inline-flex items-center gap-2 text-xs font-bold text-violet-500 hover:text-violet-700 transition relative z-10">
+                          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 4l16 16m0-16L4 20"/></svg>
+                          Clear & retry engagement
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    <textarea
-                      value={userPrediction}
-                      onChange={e => setUserPrediction(e.target.value)}
-                      rows={3}
-                      placeholder="Share your perspective, predictions, or thoughts..."
-                      className="w-full rounded-2xl border-2 border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900 p-4 text-[14px] leading-relaxed text-slate-800 dark:text-slate-200 placeholder:text-slate-400 resize-none outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all shadow-inner"
-                    />
-                  )}
-
-                  <button type="submit" disabled={(engagementMode === 'quick' && selectedOption === null) || (engagementMode === 'custom' && !userPrediction.trim()) || submitted} className="mt-2 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-[15px] font-bold text-white hover:opacity-90 hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:hover:shadow-none disabled:cursor-not-allowed active:scale-[0.98]">{submitted ? 'Saved ✓' : 'Submit response'}</button>
-                </form>
-              </>
-            )}
+                  </div>
+                )}
+              </form>
+            </div>
           </div>
         </section>
 
