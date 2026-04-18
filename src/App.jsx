@@ -235,8 +235,8 @@ function Navbar({ onGoHome, onToggleProfile, onToggleHistory, profileOpen, histo
               <button onClick={onToggleProfile} title="Profile" className={`p-2 rounded-xl transition ${profileOpen ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}>
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
               </button>
-              <button onClick={onSubscribe} className="items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-1.5 ml-2 text-xs font-bold text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/40 hover:opacity-90 transition active:scale-95">
-                Subscribe ✨
+              <button onClick={onSubscribe} className="flex items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-2.5 sm:px-3 py-1.5 ml-1 sm:ml-2 text-[11px] sm:text-xs font-bold text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/40 hover:opacity-90 transition active:scale-95 whitespace-nowrap">
+                <span className="hidden sm:inline">Subscribe </span><span className="sm:hidden">Unlock </span>✨
               </button>
             </div>
           </>
@@ -1660,7 +1660,7 @@ function SubscribeModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]" />
-      <div className="relative z-10 w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 shadow-2xl p-6 md:p-8 overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 shadow-2xl p-6 md:p-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" onClick={e => e.stopPropagation()}>
         {isComingSoon ? (
           <div className="text-center py-6 animate-in zoom-in duration-300">
             <div className="mx-auto w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center text-3xl mb-4 shadow-inner">✨</div>
