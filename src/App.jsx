@@ -198,7 +198,7 @@ function FeedbackModal({ onClose, onSubmit }) {
 }
 
 /* ─── Navbar ─────────────────────────────────────────────────── */
-function Navbar({ onGoHome, onToggleProfile, onToggleHistory, profileOpen, historyOpen, darkMode, onToggleDark, searchQuery, onSearch, onFeedback, streak, notifCount }) {
+function Navbar({ onGoHome, onToggleProfile, onToggleHistory, profileOpen, historyOpen, darkMode, onToggleDark, searchQuery, onSearch, onFeedback, streak, notifCount, onSubscribe }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const ref = useRef(null)
   const openSearch = () => { setSearchOpen(true); setTimeout(() => ref.current?.focus(), 50) }
@@ -234,6 +234,9 @@ function Navbar({ onGoHome, onToggleProfile, onToggleHistory, profileOpen, histo
               </button>
               <button onClick={onToggleProfile} title="Profile" className={`p-2 rounded-xl transition ${profileOpen ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}>
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+              </button>
+              <button onClick={onSubscribe} className="items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-1.5 ml-2 text-xs font-bold text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/40 hover:opacity-90 transition active:scale-95">
+                Subscribe ✨
               </button>
             </div>
           </>
@@ -1631,6 +1634,67 @@ function updateStreak() {
   return newStreak
 }
 
+/* ─── Subscribe Modal ────────────────────────────────────────── */
+function SubscribeModal({ onClose }) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [isComingSoon, setIsComingSoon] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email })
+      });
+      setIsComingSoon(true);
+    } catch(e) {
+      console.error(e);
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]" />
+      <div className="relative z-10 w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 shadow-2xl p-6 md:p-8 overflow-hidden" onClick={e => e.stopPropagation()}>
+        {isComingSoon ? (
+          <div className="text-center py-6 animate-in zoom-in duration-300">
+            <div className="mx-auto w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center text-3xl mb-4 shadow-inner">✨</div>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2" style={{ fontFamily: 'Georgia,serif' }}>We are coming soon!</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium">Thanks for subscribing, {name}. We will let you know when payments are live.</p>
+            <button onClick={onClose} className="w-full rounded-2xl bg-slate-900 dark:bg-white py-3.5 text-sm font-bold text-white dark:text-slate-900 hover:opacity-90 transition shadow-md active:scale-[0.98]">Close</button>
+          </div>
+        ) : (
+          <form className="animate-in slide-in-from-bottom-2 duration-300" onSubmit={submit}>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white" style={{ fontFamily: 'Georgia,serif' }}>Subscribe to unlock</h2>
+              <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs font-bold hover:bg-slate-200 transition">✕</button>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Get unlimited access to story timelines and AI recaps.</p>
+            <div className="space-y-4 mb-8">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Name</label>
+                <input required value={name} onChange={e => setName(e.target.value)} type="text" placeholder="John Doe" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">Email</label>
+                <input required value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="john@example.com" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" />
+              </div>
+            </div>
+            <button disabled={!name || !email || loading} type="submit" className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 py-3.5 text-sm font-bold text-white hover:opacity-90 transition shadow-lg shadow-indigo-200 dark:shadow-indigo-900/40 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]">
+              {loading ? 'Processing...' : 'Proceed to Payment →'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ─── App Content (Inside Router) ───────────────────────────── */
 function AppContent() {
   const navigate = useNavigate()
@@ -1641,6 +1705,7 @@ function AppContent() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [subscribeOpen, setSubscribeOpen] = useState(false)
   const [followedIds, setFollowedIds] = useState([])
   const [userAnswers, setUserAnswers] = useState({})
   const [readingHistory, setReadingHistory] = useState([])
@@ -1865,6 +1930,7 @@ function AppContent() {
         onFeedback={() => setFeedbackOpen(true)}
         streak={streak}
         notifCount={notifs.length}
+        onSubscribe={() => setSubscribeOpen(true)}
       />
 
       <NotifBanner notifs={notifs} onDismiss={dismissNotif} onOpenStory={id => { dismissNotif(id); openStory(id) }} />
@@ -1872,6 +1938,7 @@ function AppContent() {
       {profileOpen && <ProfilePanel onClose={() => setProfileOpen(false)} followedIds={followedIds} readingHistory={readingHistory} interests={interests} allFeedback={allFeedback} streak={streak} onShowPredictions={goPredictions} />}
       {historyOpen && <HistoryDrawer items={readingHistory} onClose={() => setHistoryOpen(false)} onPick={pickFromHistory} />}
       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} onSubmit={submitFeedback} />}
+      {subscribeOpen && <SubscribeModal onClose={() => setSubscribeOpen(false)} />}
 
       <div className="fixed bottom-5 right-5 z-30">
         <button onClick={restartOnboarding} className="rounded-full bg-slate-900/90 dark:bg-white/90 text-white dark:text-slate-900 px-4 py-2 text-xs font-bold shadow-lg border border-slate-800/20 dark:border-white/30 hover:opacity-95 transition">

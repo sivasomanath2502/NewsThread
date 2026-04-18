@@ -239,6 +239,43 @@ app.get('/api/news', handleTopHeadlines)
 app.get('/api/news/top-headlines', handleTopHeadlines)
 app.get('/api/news/everything', handleEverything)
 
+import { Redis } from '@upstash/redis';
+
+// Initialize Redis if credentials exist locally
+const redis = (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  : null;
+
+// --- Subscribe Route (Fallback DB) ---
+const subscribersDb = [];
+app.use(express.json()); // ensure json body parsing is available for POST
+app.post('/api/subscribe', async (req, res) => {
+  const { name, email } = req.body || {};
+  if (!name || !email) {
+    return res.status(400).json({ success: false, error: 'Name and email are required' });
+  }
+  const subscriber = { id: Date.now(), name, email, date: new Date().toISOString() };
+  
+  if (redis) {
+    try {
+      await redis.lpush('newsthread_subscribers', subscriber);
+      console.log('[subscribe] Saved to Upstash Redis DB:', subscriber);
+    } catch(e) {
+      console.error('[subscribe] DB failed:', e);
+      return res.status(500).json({ success: false, error: 'DB failure' })
+    }
+  } else {
+    subscribersDb.push(subscriber);
+    console.log('[subscribe] New subscriber saved to local memory:', subscriber);
+  }
+  
+  res.json({ success: true, message: 'Subscription details recorded.' });
+})
+
+
 /**
  * GET /api/article?url=<encoded-url>
  *
