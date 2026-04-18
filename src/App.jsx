@@ -200,9 +200,13 @@ function FeedbackModal({ onClose, onSubmit }) {
 /* ─── Navbar ─────────────────────────────────────────────────── */
 function Navbar({ onGoHome, onToggleProfile, onToggleHistory, profileOpen, historyOpen, darkMode, onToggleDark, searchQuery, onSearch, onFeedback, streak, notifCount, onSubscribe }) {
   const [searchOpen, setSearchOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const ref = useRef(null)
+  
   const openSearch = () => { setSearchOpen(true); setTimeout(() => ref.current?.focus(), 50) }
   const closeSearch = () => { setSearchOpen(false); onSearch('') }
+  const closeMenu = () => setMobileMenuOpen(false)
+
   return (
     <nav className="fixed inset-x-0 top-0 z-50 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
       <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 h-[54px]">
@@ -216,27 +220,68 @@ function Navbar({ onGoHome, onToggleProfile, onToggleHistory, profileOpen, histo
             <button onClick={onGoHome} className="shrink-0 text-[17px] font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition" style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic' }}>NewsThread</button>
             {streak >= 1 && <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800 px-2 py-0.5 text-[11px] font-bold text-orange-600 dark:text-orange-400">🔥 {streak} day{streak !== 1 ? 's' : ''}</span>}
             <div className="flex-1 min-w-0" />
-            <div className="flex items-center gap-1 sm:gap-0.5 flex-wrap justify-end">
+            <div className="flex items-center gap-1 sm:gap-0.5 relative">
               <button onClick={openSearch} title="Search" className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition">
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="7" cy="7" r="5" /><path d="M12 12l3 3" /></svg>
               </button>
-              <button onClick={onFeedback} title="Feedback" className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition">
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
-              </button>
-              <button onClick={onToggleDark} title="Toggle theme" className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition">
-                {darkMode
-                  ? <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 01-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" /></svg>
-                  : <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>}
-              </button>
-              <button onClick={onToggleHistory} title="History" className={`relative p-2 rounded-xl transition ${historyOpen ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}>
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+
+              {/* Desktop Icons */}
+              <div className="hidden sm:flex items-center gap-0.5">
+                <button onClick={onFeedback} title="Feedback" className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                </button>
+                <button onClick={onToggleDark} title="Toggle theme" className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition">
+                  {darkMode
+                    ? <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 01-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" /></svg>
+                    : <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>}
+                </button>
+                <button onClick={onToggleHistory} title="History" className={`relative p-2 rounded-xl transition ${historyOpen ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}>
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {notifCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />}
+                </button>
+                <button onClick={onToggleProfile} title="Profile" className={`p-2 rounded-xl transition ${profileOpen ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}>
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+                </button>
+              </div>
+
+              {/* Mobile Hamburger Menu Trigger */}
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} title="Menu" className={`sm:hidden relative p-2 rounded-xl transition ${mobileMenuOpen ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}>
+                <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
                 {notifCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />}
               </button>
-              <button onClick={onToggleProfile} title="Profile" className={`p-2 rounded-xl transition ${profileOpen ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'}`}>
-                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
-              </button>
-              <button onClick={onSubscribe} className="flex items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-2.5 sm:px-3 py-1.5 ml-1 sm:ml-2 text-[11px] sm:text-xs font-bold text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/40 hover:opacity-90 transition active:scale-95 whitespace-nowrap">
-                <span className="hidden sm:inline">Subscribe </span><span className="sm:hidden">Unlock </span>✨
+
+              {/* Mobile Dropdown Menu */}
+              {mobileMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40 sm:hidden" onClick={closeMenu} />
+                  <div className="absolute top-12 right-12 mt-1 w-44 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-xl py-2 z-50 sm:hidden flex flex-col px-2 animate-in fade-in slide-in-from-top-2">
+                    <button onClick={() => { closeMenu(); onToggleProfile(); }} className="w-full text-left px-3 py-2.5 text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-3">
+                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+                      Profile
+                    </button>
+                    <button onClick={() => { closeMenu(); onToggleHistory(); }} className="w-full text-left px-3 py-2.5 text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        History
+                      </div>
+                      {notifCount > 0 && <span className="w-2 h-2 rounded-full bg-red-500" />}
+                    </button>
+                    <button onClick={() => { closeMenu(); onToggleDark(); }} className="w-full text-left px-3 py-2.5 text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-3">
+                      {darkMode
+                        ? <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 01-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" /></svg>
+                        : <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>}
+                      Theme
+                    </button>
+                    <button onClick={() => { closeMenu(); onFeedback(); }} className="w-full text-left px-3 py-2.5 text-sm font-semibold rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-3">
+                      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+                      Feedback
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <button onClick={() => { closeMenu(); onSubscribe(); }} className="flex items-center justify-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-1.5 ml-1 sm:ml-2 text-[11px] sm:text-xs font-bold text-white shadow-md shadow-indigo-200 dark:shadow-indigo-900/40 hover:opacity-90 transition active:scale-95 whitespace-nowrap">
+                Subscribe ✨
               </button>
             </div>
           </>
